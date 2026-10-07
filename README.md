@@ -147,19 +147,37 @@ src/
 
 ## Deployment
 
-### DigitalOcean Droplet (existing setup)
+### CI/CD — GitHub Actions (Automated Deploys)
 
-The API already runs at `graphql.dmbk.network` with Caddy handling TLS. To deploy updates:
+A deploy workflow is included at `.github/workflows/deploy.yml`. On every push to `main`, it SSHes into the droplet, pulls the latest code, installs production deps, and restarts PM2.
+
+**To enable it, add these secrets to your GitHub repo** (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `DROPLET_HOST` | `209.38.147.18` (or your droplet IP) |
+| `DROPLET_USER` | `root` |
+| `DROPLET_SSH_KEY` | The SSH private key that matches a public key on the droplet |
+
+To get the SSH key for the droplet:
+```bash
+# From your local machine or the droplet itself, generate a deploy key
+ssh-keygen -t ed25519 -C "deploy@graphql-api" -f ~/.ssh/deploy-key -N ""
+
+# Copy the public key to the droplet
+ssh-copy-id -i ~/.ssh/deploy-key.pub root@209.38.147.18
+
+# Copy the private key (the whole file) into the DROPLET_SSH_KEY secret
+cat ~/.ssh/deploy-key
+```
+
+### DigitalOcean Droplet (manual)
 
 ```bash
-# SSH into the droplet
 ssh root@<droplet-ip>
-
-# Pull latest code
 cd /opt/graphql-api
 git pull
-
-# Restart
+npm install --omit=dev
 pm2 restart graphql-api
 ```
 
