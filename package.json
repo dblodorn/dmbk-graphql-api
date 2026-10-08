@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "tsx --env-file=.env src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
@@ -14,18 +14,16 @@
   "description": "",
   "dependencies": {
     "@pothos/core": "^4.15.1",
-    "@pothos/plugin-dataloader": "^4.4.6",
     "@pothos/plugin-relay": "^4.8.1",
     "@pothos/plugin-scope-auth": "^4.2.1",
-    "bcryptjs": "^3.0.3",
     "dataloader": "^2.2.3",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.24.2",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.11.0"
+    "mongoose": "^9.11.0",
+    "viem": "^2.57.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",

@@ -59,8 +59,16 @@ Create a `.env` file in the project root:
 PORT=4000
 NODE_ENV=development
 JWT_SECRET=your-random-secret-here
-MONGODB_URI=mongodb+srv://user:password@cluster.xxxxx.mongodb.net/graphql-api
-MONGODB_DB_NAME=graphql-api
+# The dmbk-world cluster. The database is chosen per collection (below), not by this URI.
+MONGODB_URI=mongodb+srv://user:password@cluster.xxxxx.mongodb.net/
+PHOTOS_DB_NAME=dmbk-photos      # default
+LORA_DB_NAME=lora-trainer       # default
+# Public base for photo derivatives — same value as the dmbk app's DO_SPACES_CDN_URL
+DO_SPACES_CDN_URL=https://...
+# Wallets allowed to curate photos (comma-separated)
+ALLOWED_ADDRESSES=0x...
+# Hosts users sign in from; a SIWE message naming any other domain is rejected
+SIWE_DOMAINS=dmbk.io,localhost:3000
 ```
 
 ### Development
@@ -85,21 +93,32 @@ pm2 start ecosystem.config.cjs
 
 ## API
 
+The API serves content owned by two other apps on the same Atlas cluster: the photo library, keyword vocabulary and SoundCloud snapshot from `dmbk-photos` ([dmbk](https://github.com/dblodorn/dmbk)), and LoRA trainings and generated images from `lora-trainer` ([lora-trainer](https://github.com/dblodorn/lora-trainer)).
+
 ### Queries
 
 | Field | Auth | Description |
 |-------|------|-------------|
 | `_health` | none | Health check. Returns `"ok"`. |
-| `me` | JWT | Returns the authenticated user. |
-| `users` | JWT | Lists all users. |
+| `node` / `nodes` | none | Refetch any `Photo`, `LoraTraining` or `GeneratedImage` by global ID. |
+| `photos` | none (admin for `visibility`/`states`) | Ready, visible photos, newest first; filter by `keywords`. |
+| `keywords` | none | Photo keyword vocabulary with counts. |
+| `loraTrainings` | none | Completed, visible LoRA trainings; each has an `images` connection. |
+| `soundPlaylists` | none | Latest cached SoundCloud playlists. |
+| `viewer` | JWT | The signed-in wallet, with its own `loraTrainings` and `generatedImages` (including hidden). |
 
 ### Mutations
 
 | Field | Auth | Type | Description |
 |-------|------|------|-------------|
-| `signUp` | none | Standard | Create a new user account. |
-| `signIn` | none | Standard | Authenticate and receive a JWT. |
-| `updateProfile` | JWT | Relay | Update the authenticated user's name. |
+| `siweNonce` | none | Standard | Single-use nonce for a SIWE message. |
+| `signInWithEthereum` | none | Relay | Verify a signed SIWE message; returns a 7-day JWT. |
+| `updatePhoto` | admin | Relay | Replace a photo's title and/or keywords. |
+| `setPhotoHidden` | admin | Relay | Hide or unhide a photo. |
+| `setLoraTrainingHidden` | owner | Relay | Hide or unhide one of your LoRA trainings. |
+| `setGeneratedImageHidden` | owner | Relay | Hide or unhide an image you generated. |
+
+Admin = a wallet in `ALLOWED_ADDRESSES`. Owner = the wallet stored on the record.
 
 ### Relay Compatibility
 
@@ -112,38 +131,45 @@ The API implements the [Relay Server Specification](https://relay.dev/docs/guide
 
 ### Authentication
 
-Include the JWT in the `Authorization` header:
+Sign in with Ethereum (EIP-4361):
+
+1. `mutation { siweNonce }`
+2. Have the wallet sign a SIWE message containing that nonce, with `domain` set to the site the user is on (must be listed in `SIWE_DOMAINS`).
+3. `signInWithEthereum(input: { message, signature })` returns a token.
+
+Then include it in the `Authorization` header:
 
 ```
 Authorization: Bearer <token>
 ```
 
-Unauthenticated requests can only access `_health`, `signUp`, and `signIn`. All other fields require a valid token.
+Reads are public. Hidden or unfinished records are only visible to admins (photos) or their owners (LoRA records); to everyone else they look nonexistent.
 
 ## Project Structure
 
 ```
 src/
 ├── index.ts              # Server entry point
-├── context.ts            # GraphQL context factory (currentUser, DataLoader, DB)
-├── auth.ts               # JWT verification from request headers
-├── db/
-│   └── mongoose.ts       # MongoDB connection
-├── models/
-│   └── User.ts           # Mongoose User model (email, password, name, role)
+├── env.ts                # Validated configuration
+├── errors.ts             # Domain error → GraphQL error code mapping
+├── context.ts            # Per-request viewer + visibility-scoped DataLoaders
+├── auth/                 # SIWE verification, JWT issue/verify
+├── db/mongoose.ts        # One connection, a handle per database
+├── models/               # Mongoose schemas mirroring the owning apps' documents
+├── lib/                  # Repositories: every query, write and visibility rule
 └── schema/
-    ├── builder.ts        # Pothos SchemaBuilder with plugins
-    ├── queries.ts        # Query type definitions
-    ├── mutations.ts      # Mutation type definitions
-    └── types/
-        └── user.ts       # User GraphQL object type
+    ├── builder.ts        # Pothos SchemaBuilder (Relay + scope-auth)
+    ├── queries.ts        # Query fields
+    ├── mutations.ts      # Relay mutations
+    └── types/            # Photo, Keyword, LoraTraining, GeneratedImage, Sound*, Viewer
 ```
 
 ## Adding a New Type
 
-1. Define a Mongoose model in `src/models/`
-2. Create a Pothos object ref and implement it in `src/schema/types/`
-3. Add query/mutation resolvers in `src/schema/queries.ts` or `src/schema/mutations.ts`
+1. Define a Mongoose model in `src/models/` that matches the stored documents exactly (explicit `collection`, `versionKey: false`, string `_id` where the data uses one)
+2. Put its queries and visibility rules in a repository under `src/lib/`
+3. Create a Pothos ref in `src/schema/types/` — `builder.node` if clients should refetch it by ID
+4. Add query/mutation fields in `src/schema/queries.ts` or `src/schema/mutations.ts`
 
 ## Deployment
 

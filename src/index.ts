@@ -1,11 +1,14 @@
-import { createServer, IncomingMessage } from 'node:http';
-import { createYoga, YogaInitialContext } from 'graphql-yoga';
+import { createServer } from 'node:http';
+import { createYoga } from 'graphql-yoga';
+import { env } from './env.js';
 import { builder } from './schema/builder.js';
 import { connectDatabase } from './db/mongoose.js';
 import { createContext } from './context.js';
-import { getUserFromRequest } from './auth.js';
+import { getViewerFromRequest } from './auth/token.js';
+import { maskError } from './errors.js';
 
-// Import schema types to register them with the builder
+// Schema files register their types and fields on the shared builder as an
+// import side effect; they must be imported before toSchema() runs.
 import './schema/queries.js';
 import './schema/mutations.js';
 
@@ -16,35 +19,24 @@ async function main() {
 
   const yoga = createYoga({
     schema,
-    context: async ({ request }: YogaInitialContext & { request: IncomingMessage }) => {
-      const user = getUserFromRequest(request);
-      return createContext(user);
-    },
+    context: ({ request }) => createContext(getViewerFromRequest(request)),
     graphiql: {
-      title: 'GraphQL API Explorer',
-      defaultQuery: `# Welcome to the GraphQL API
-#
-# Queries:
-query Health {
-  _health
+      title: 'dmbk GraphQL API',
+      defaultQuery: `query Photos {
+  photos(first: 5) {
+    edges { node { id title thumbUrl } }
+    pageInfo { hasNextPage endCursor }
+  }
 }
-#
-# Mutations:
-# mutation SignUp {
-#   signUp(email: "user@example.com", password: "secret123", name: "User") {
-#     id email name role
-#   }
-# }
 `,
     },
-    maskedErrors: process.env.NODE_ENV === 'production',
+    maskedErrors: { maskError, isDev: !env.isProduction },
   });
 
   const server = createServer(yoga);
 
-  const port = parseInt(process.env.PORT || '4000', 10);
-  server.listen(port, () => {
-    console.log(`GraphQL API running at http://localhost:${port}/graphql`);
+  server.listen(env.port, () => {
+    console.log(`GraphQL API running at http://localhost:${env.port}/graphql`);
   });
 }
 
