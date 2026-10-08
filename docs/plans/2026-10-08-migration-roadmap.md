@@ -26,7 +26,7 @@ Remaining before the first deploy:
   - `node(id:)` round-trips for each node type;
   - signed in as an admin wallet, `updatePhoto` changes keyword counts the same way dmbk does (compare the `keywords` collection before and after).
 - [ ] Set the new env vars on the droplet before pushing: `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET`. Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI` or `DO_SPACES_CDN_URL`.
-- [ ] Fix `NODE_ENV` in `ecosystem.config.cjs`. It currently sets `development`, which makes `JWT_SECRET` optional (falling back to a known dev secret) and returns error details to clients.
+- [x] Fix `NODE_ENV` in `ecosystem.config.cjs`. It set `development`, which made `JWT_SECRET` optional (falling back to a known dev secret) and returned error details to clients. It now sets `production`, so **`JWT_SECRET` must be in the droplet's `.env` before this deploys**, or the server exits on startup.
 - [ ] Configure CORS in `createYoga`. Yoga's default reflects any origin. Restrict it to the dmbk apexes (`dmbk.io`, `dain.kim`, `db13.us`), the lora-trainer domain, `localhost`, and Vercel previews.
 - [ ] Support patterns in `SIWE_DOMAINS` (for example `*.vercel.app`), mirroring dmbk's `isAllowedHost`. Without that, sign-in fails on Vercel preview URLs.
 - [ ] Optional: quiet Yoga's `ERR` logging for expected domain errors such as failed sign-ins and forbidden calls, so real failures stand out in the PM2 logs.
