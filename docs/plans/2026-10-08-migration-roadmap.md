@@ -19,13 +19,16 @@ Already in the code: `photos`, `keywords`, `loraTrainings` (+ `images`), `soundP
 
 Remaining before the first deploy:
 
-- [ ] Create a local `.env` and run `npm run dev`. Then check in GraphiQL that:
-  - `photos` returns the 12 photos minus hidden and non-ready ones, with working CDN URLs;
-  - `loraTrainings` returns completed, visible trainings, and their `images` paginate;
-  - `soundPlaylists` returns the snapshot;
-  - `node(id:)` round-trips for each node type;
-  - signed in as an admin wallet, `updatePhoto` changes keyword counts the same way dmbk does (compare the `keywords` collection before and after).
-- [ ] Set the new env vars on the droplet before pushing: `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET`. Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI` or `DO_SPACES_CDN_URL`.
+- [x] Local `.env` (values from `~/dev/dmbk/.env.local`, fresh `JWT_SECRET`) and live read checks, done 2026-10-09:
+  - `photos`: 8 public of 12, CDN URLs resolve, admin-only fields null when anonymous, second page works;
+  - `keywords` counts match; `soundPlaylists` returns the snapshot;
+  - `loraTrainings`: 14 public of 16, 334 visible images, owner-only fields null when anonymous;
+  - `node(id:)` round-trips for `Photo`, `LoraTraining` and `GeneratedImage`.
+- [x] Database access: the API uses its own Atlas user, `graphql-api`, with `readWrite` on `dmbk-photos` and `lora-trainer` only, scoped to the `dmbk-world` cluster. The apps' users (`dmbk-photos-app`, `lora-trainer-app2`) can each reach only their own database.
+  - An older user, `dmbk-graphql-api`, has `readWriteAnyDatabase` and isn't used by this code. Delete it once nothing else depends on it.
+- [ ] Not yet tested: the mutations against live data. This needs a signature from an admin wallet. Signed in as the admin wallet, check that `updatePhoto` changes keyword counts the same way dmbk does (compare the `keywords` collection before and after), and that hide/unhide round-trips.
+- [ ] Set the env vars on the droplet before merging: `MONGODB_URI` (the `graphql-api` user), `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET` (generate a separate one for production). Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI`, `DO_SPACES_CDN_URL` or (in production) `JWT_SECRET`.
+- [ ] Add lora-trainer's domain to `SIWE_DOMAINS`. It isn't cloned locally, so its domain is unknown here.
 - [x] Fix `NODE_ENV` in `ecosystem.config.cjs`. It set `development`, which made `JWT_SECRET` optional (falling back to a known dev secret) and returned error details to clients. It now sets `production`, so **`JWT_SECRET` must be in the droplet's `.env` before this deploys**, or the server exits on startup.
 - [ ] Configure CORS in `createYoga`. Yoga's default reflects any origin. Restrict it to the dmbk apexes (`dmbk.io`, `dain.kim`, `db13.us`), the lora-trainer domain, `localhost`, and Vercel previews.
 - [ ] Support patterns in `SIWE_DOMAINS` (for example `*.vercel.app`), mirroring dmbk's `isAllowedHost`. Without that, sign-in fails on Vercel preview URLs.
