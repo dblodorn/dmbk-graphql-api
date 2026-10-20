@@ -15,18 +15,20 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 
 ## Phase 1 — finish and ship
 
-Already in the code: `photos`, `keywords`, `loraTrainings` (+ `images`), `soundPlaylists`, `node`/`nodes`, `viewer`; `siweNonce` / `signInWithEthereum`; `updatePhoto`, `setPhotoHidden`, `setLoraTrainingHidden`, `setGeneratedImageHidden`.
+Already in the code: `dmbkPhotos`, `dmbkPhotosKeywords`, `loraTrainerTrainings` (+ `images`), `dmbkPhotosSoundPlaylists`, `node`/`nodes`, `viewer` (+ `loraTrainerTrainings`, `loraTrainerImages`); `siweNonce` / `signInWithEthereum`; `dmbkPhotosUpdatePhoto`, `dmbkPhotosSetPhotoHidden`, `loraTrainerSetTrainingHidden`, `loraTrainerSetImageHidden`.
+
+Naming (2026-10-20): fields that touch a database are prefixed with its camelCase name (`dmbkPhotos…` / `loraTrainer…`); the names in the checks below are the current ones. New fields in Phases 2–3 follow the same rule.
 
 Remaining before the first deploy:
 
 - [x] Local `.env` (values from `~/dev/dmbk/.env.local`, fresh `JWT_SECRET`) and live read checks, done 2026-10-09:
-  - `photos`: 8 public of 12, CDN URLs resolve, admin-only fields null when anonymous, second page works;
-  - `keywords` counts match; `soundPlaylists` returns the snapshot;
-  - `loraTrainings`: 14 public of 16, 334 visible images, owner-only fields null when anonymous;
+  - `dmbkPhotos`: 8 public of 12, CDN URLs resolve, admin-only fields null when anonymous, second page works;
+  - `dmbkPhotosKeywords` counts match; `dmbkPhotosSoundPlaylists` returns the snapshot;
+  - `loraTrainerTrainings`: 14 public of 16, 334 visible images, owner-only fields null when anonymous;
   - `node(id:)` round-trips for `Photo`, `LoraTraining` and `GeneratedImage`.
 - [x] Database access: the API uses its own Atlas user, `graphql-api`, with `readWrite` on `dmbk-photos` and `lora-trainer` only, scoped to the `dmbk-world` cluster. The apps' users (`dmbk-photos-app`, `lora-trainer-app2`) can each reach only their own database.
   - An older user, `dmbk-graphql-api`, has `readWriteAnyDatabase` and isn't used by this code. Delete it once nothing else depends on it.
-- [x] Mutations tested against live data (2026-10-20) with `npm run test:mutations`: SIWE sign-in and refusals, `updatePhoto` keyword normalization and counts, hide/unhide counts and visibility, and LoRA owner/non-owner hide on temporary fixtures. Everything is restored afterwards.
+- [x] Mutations tested against live data (2026-10-20) with `npm run test:mutations`: SIWE sign-in and refusals, `dmbkPhotosUpdatePhoto` keyword normalization and counts, hide/unhide counts and visibility, and LoRA owner/non-owner hide on temporary fixtures. Everything is restored afterwards.
   - Shared with dmbk, not fixed: hiding the last photo that carries a keyword deletes that keyword's entry, and unhiding recreates it with the slug as its label. The display label is lost (`Baja` becomes `baja`). Fix it in both repos or neither.
 - [x] Set the env vars on the droplet before merging (done 2026-10-20, production `JWT_SECRET` generated on the droplet): `MONGODB_URI` (the `graphql-api` user), `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET` (generate a separate one for production). Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI`, `DO_SPACES_CDN_URL` or (in production) `JWT_SECRET`.
 - [x] Add lora-trainer's domain to `SIWE_DOMAINS`: it's `arenatrainer.dmbk.io`, covered by `*.dmbk.io`. Local `.env` now has `dmbk.io,*.dmbk.io,dain.kim,*.dain.kim,db13.us,localhost:3000`; the droplet's `.env` needs the same.
@@ -53,13 +55,13 @@ Port from dmbk (`dblodorn/dmbk`):
 
 Relay mutations:
 
-- `reservePhotoUpload(input: { contentType, byteSize, title?, keywords? })` returns `{ photo, uploadUrl }`.
+- `dmbkPhotosReservePhotoUpload(input: { contentType, byteSize, title?, keywords? })` returns `{ photo, uploadUrl }`.
   - The server generates the UUID and the key; the client PUTs the bytes directly to Spaces. Bytes never pass through this API.
   - The pending photo is only visible to admins.
-- `finalizePhoto(input: { id, title?, keywords? })` returns `{ photo, photoEdge }`.
+- `dmbkPhotosFinalizePhoto(input: { id, title?, keywords? })` returns `{ photo, photoEdge }`.
   - `photoEdge` lets the admin list use `@prependEdge`.
   - Any failure marks the record `failed` with a reason rather than leaving it half-promoted.
-- `deletePhoto(input: { id })` returns `{ deletedPhotoId }` for `@deleteRecord`.
+- `dmbkPhotosDeletePhoto(input: { id })` returns `{ deletedPhotoId }` for `@deleteRecord`.
   - If the record is removed but its stored files are not, return an error that says so; don't report a clean delete.
 
 Needs:
@@ -86,9 +88,9 @@ Known so far (from `features/lora.ts`, `generate.ts`, `slideshow.ts`):
   - Rate limit: 8 batches per 24 hours per wallet, unless `isPaymentExempt`.
   - Each image is mirrored to `lora-trainer/images/{loraId}/{id}.{ext}`, keeping both `imageUrl` (fal) and `cdnUrl` (Spaces).
   - The call blocks for the whole generation. Decide between a long-running mutation (raise timeouts in Caddy) and returning `pending` records that the client polls or subscribes to.
-- **Remaining quota.** `generate.remaining` becomes a `Viewer` field.
-- **Slideshow.** `slideshow.randomImages` becomes a query. Unlike the original, it should exclude hidden images and hidden trainings.
-- **Covered by Phase 1 already.** lora-trainer's `listHidden`, `listHiddenImages`, `getById` and `listByLora` map to `viewer.loraTrainings`, `viewer.generatedImages`, `node` and `LoraTraining.images`. The new versions don't have the original leaks: anyone could read hidden records or list hidden items by wallet.
+- **Remaining quota.** `generate.remaining` becomes a `Viewer` field (`viewer.loraTrainerRemainingGenerations`).
+- **Slideshow.** `slideshow.randomImages` becomes a query (`loraTrainerSlideshowImages`). Unlike the original, it should exclude hidden images and hidden trainings.
+- **Covered by Phase 1 already.** lora-trainer's `listHidden`, `listHiddenImages`, `getById` and `listByLora` map to `viewer.loraTrainerTrainings`, `viewer.loraTrainerImages`, `node` and `LoraTraining.images`. The new versions don't have the original leaks: anyone could read hidden records or list hidden items by wallet.
 
 Needs: `FAL_KEY`, the Spaces credentials from Phase 2, and the payment-exemption list.
 

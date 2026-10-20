@@ -58,7 +58,7 @@ builder.relayMutationField(
 // Photos (admin)
 
 builder.relayMutationField(
-  'updatePhoto',
+  'dmbkPhotosUpdatePhoto',
   {
     inputFields: (t) => ({
       id: t.globalID({ required: true, for: PhotoRef }),
@@ -85,7 +85,7 @@ builder.relayMutationField(
 );
 
 builder.relayMutationField(
-  'setPhotoHidden',
+  'dmbkPhotosSetPhotoHidden',
   {
     inputFields: (t) => ({
       id: t.globalID({ required: true, for: PhotoRef }),
@@ -107,7 +107,7 @@ builder.relayMutationField(
 // LoRA (owner)
 
 builder.relayMutationField(
-  'setLoraTrainingHidden',
+  'loraTrainerSetTrainingHidden',
   {
     inputFields: (t) => ({
       id: t.globalID({ required: true, for: LoraTrainingRef }),
@@ -128,7 +128,7 @@ builder.relayMutationField(
 );
 
 builder.relayMutationField(
-  'setGeneratedImageHidden',
+  'loraTrainerSetImageHidden',
   {
     inputFields: (t) => ({
       id: t.globalID({ required: true, for: GeneratedImageRef }),
