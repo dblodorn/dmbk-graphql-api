@@ -1,12 +1,14 @@
 import { initContextCache } from '@pothos/core';
 import DataLoader from 'dataloader';
-import type { Viewer } from './auth/token.js';
+import type { Viewer } from './auth/viewer.js';
 import type { PhotoDoc } from './models/photos.js';
 import type { GeneratedImageDoc, LoraTrainingDoc } from './models/lora.js';
 import { ADMIN_SCOPE, PUBLIC_SCOPE, loadPhotos } from './lib/photos/repository.js';
 import { loadImages, loadTrainings } from './lib/lora/repository.js';
 
 export interface ContextType {
+  /** The incoming request; `signOut` needs its bearer token. */
+  request: Request;
   viewer: Viewer | null;
   /**
    * Per-request loaders, already scoped to what this viewer may see: a record
@@ -18,9 +20,10 @@ export interface ContextType {
   imageLoader: DataLoader<string, GeneratedImageDoc | null>;
 }
 
-export function createContext(viewer: Viewer | null): ContextType {
+export function createContext(request: Request, viewer: Viewer | null): ContextType {
   const photoScope = viewer?.isAdmin ? ADMIN_SCOPE : PUBLIC_SCOPE;
   return {
+    request,
     viewer,
     photoLoader: new DataLoader((ids) => loadPhotos(ids, photoScope)),
     trainingLoader: new DataLoader((ids) => loadTrainings(ids, viewer)),

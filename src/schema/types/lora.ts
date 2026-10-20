@@ -14,10 +14,10 @@ export const LoraStatusEnum = builder.enumType('LoraStatus', {
 export const LoraTrainingRef = builder.objectRef<LoraTrainingDoc>('LoraTraining');
 export const GeneratedImageRef = builder.objectRef<GeneratedImageDoc>('GeneratedImage');
 
-// Owner-only fields (wallet address, hidden flag, raw training data) resolve to
-// null for anyone but the record's own wallet.
+// Owner-only fields (hidden flag, raw training data) resolve to null for anyone
+// but the record's owner.
 const ownerOnly = {
-  authScopes: (doc: { walletAddress: string }, _args: object, context: { viewer: Parameters<typeof isOwner>[0] }) =>
+  authScopes: (doc: { ownerId?: string | null }, _args: object, context: { viewer: Parameters<typeof isOwner>[0] }) =>
     isOwner(context.viewer, doc),
   unauthorizedResolver: () => null,
   nullable: true,
@@ -41,7 +41,6 @@ builder.node(LoraTrainingRef, {
     arenaChannelUrl: t.exposeString('arenaChannelUrl', { nullable: true }),
     arenaChannelTitle: t.exposeString('arenaChannelTitle', { nullable: true }),
 
-    walletAddress: t.string({ ...ownerOnly, description: 'Owner only.', resolve: (l) => l.walletAddress }),
     hidden: t.boolean({ ...ownerOnly, description: 'Owner only.', resolve: (l) => l.hidden === true }),
     trainingZipUrl: t.string({ ...ownerOnly, description: 'Owner only.', resolve: (l) => l.trainingZipUrl }),
 
@@ -77,7 +76,6 @@ builder.node(GeneratedImageRef, {
       resolve: (img, _args, context) => context.trainingLoader.load(img.loraTrainingId),
     }),
 
-    walletAddress: t.string({ ...ownerOnly, description: 'Owner only.', resolve: (img) => img.walletAddress }),
     hidden: t.boolean({ ...ownerOnly, description: 'Owner only.', resolve: (img) => img.hidden === true }),
   }),
 });

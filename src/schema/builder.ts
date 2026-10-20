@@ -13,9 +13,9 @@ export const builder = new SchemaBuilder<{
   DefaultEdgesNullability: false;
   DefaultNodeNullability: false;
   AuthScopes: {
-    /** Any wallet that completed SIWE. */
+    /** Any account with a valid session that is still on ALLOWED_EMAILS. */
     signedIn: boolean;
-    /** A wallet in ALLOWED_ADDRESSES — may curate the photo library. */
+    /** An account in ADMIN_EMAILS — may curate the photo library. */
     admin: boolean;
   };
 }>({

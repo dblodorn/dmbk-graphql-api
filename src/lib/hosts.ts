@@ -1,13 +1,13 @@
 /*
- * Host allowlist matching, shared by SIWE (the message's `domain`) and CORS
- * (the request's `Origin`). Mirrors dmbk's `isAllowedHost` (`src/lib/auth.ts`):
+ * Host allowlist matching for CORS (the request's `Origin`, checked against
+ * ALLOWED_ORIGINS). Mirrors dmbk's `isAllowedHost` (`src/lib/auth.ts`):
  * a pattern is either an exact host (`dmbk.io`, `localhost:3000`) or `*.` plus
  * a suffix (`*.dmbk.io`), which matches any subdomain at any depth but not the
  * apex itself — list `dmbk.io` separately.
  *
  * Only wildcard domains whose DNS you control. `*.vercel.app` would trust every
- * Vercel deployment, including ones anyone else can create, so a phishing site
- * there could obtain a signature that signs in here.
+ * Vercel deployment, including ones anyone else can create, so any site there
+ * could call this API from a signed-in visitor's browser.
  */
 
 export function isAllowedHost(host: string, patterns: readonly string[]): boolean {

@@ -8,7 +8,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test:mutations": "tsx --env-file=.env scripts/test-mutations.ts",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "backfill:owner-id": "tsx --env-file=.env scripts/backfill-owner-id.ts"
   },
   "keywords": [],
   "author": "",
@@ -18,17 +19,16 @@
     "@pothos/core": "^4.15.1",
     "@pothos/plugin-relay": "^4.8.1",
     "@pothos/plugin-scope-auth": "^4.2.1",
+    "better-auth": "^1.7.12",
     "dataloader": "^2.2.3",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.24.6",
-    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.11.0",
-    "tsx": "^4.23.15",
-    "viem": "^2.57.3"
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.4",
+    "better-call": "^1.4.4",
     "typescript": "^7.0.2"
   },
   "type": "module"

@@ -4,7 +4,7 @@ import { env } from './env.js';
 import { builder } from './schema/builder.js';
 import { connectDatabase } from './db/mongoose.js';
 import { createContext } from './context.js';
-import { getViewerFromRequest } from './auth/token.js';
+import { getViewerFromRequest } from './auth/viewer.js';
 import { maskError } from './errors.js';
 import { isAllowedOrigin } from './lib/hosts.js';
 
@@ -20,7 +20,7 @@ async function main() {
 
   const yoga = createYoga({
     schema,
-    context: ({ request }) => createContext(getViewerFromRequest(request)),
+    context: async ({ request }) => createContext(request, await getViewerFromRequest(request)),
     graphiql: {
       title: 'dmbk GraphQL API',
       defaultQuery: `query DmbkPhotos {
@@ -32,12 +32,12 @@ async function main() {
 `,
     },
     maskedErrors: { maskError, isDev: !env.isProduction },
-    // Browsers may call this API only from the sites users sign in from.
+    // Browsers may call this API only from the sites in ALLOWED_ORIGINS.
     // Auth is a bearer token, not a cookie, so credentials stay off. Requests
     // without an Origin (curl, same-origin GraphiQL) are unaffected.
     cors: (request) => {
       const origin = request.headers.get('origin');
-      if (!origin || !isAllowedOrigin(origin, env.siweDomains)) return false;
+      if (!origin || !isAllowedOrigin(origin, env.allowedOrigins)) return false;
       // Already checked above: '*' makes Yoga echo this Origin back and add `Vary: Origin`.
       return { origin: '*', methods: ['GET', 'POST', 'OPTIONS'], credentials: false, maxAge: 86400 };
     },
