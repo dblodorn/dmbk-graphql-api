@@ -19,6 +19,18 @@ function list(name: string): string[] {
     .filter(Boolean);
 }
 
+/** A `*` is only accepted as a leading `*.` label; anything else is a typo that would never match. */
+function hostPatterns(name: string): string[] {
+  const patterns = list(name);
+  for (const p of patterns) {
+    if (p.slice(p.startsWith('*.') ? 2 : 0).includes('*')) {
+      console.error(`${name}: "${p}" — a wildcard may only appear as a leading "*."`);
+      process.exit(1);
+    }
+  }
+  return patterns;
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 export const env = {
@@ -41,7 +53,8 @@ export const env = {
   adminAddresses: list('ALLOWED_ADDRESSES'),
   /**
    * Hosts a SIWE message may name as its `domain` — the sites users sign in
-   * from (e.g. dmbk.io, localhost:3000), not this API's own host.
+   * from (e.g. dmbk.io, *.dmbk.io, localhost:3000), not this API's own host.
+   * The same list is the CORS allowlist. Pattern rules: `lib/hosts.ts`.
    */
-  siweDomains: list('SIWE_DOMAINS'),
+  siweDomains: hostPatterns('SIWE_DOMAINS'),
 } as const;

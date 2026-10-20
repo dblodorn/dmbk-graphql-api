@@ -6,6 +6,7 @@ import { connectDatabase } from './db/mongoose.js';
 import { createContext } from './context.js';
 import { getViewerFromRequest } from './auth/token.js';
 import { maskError } from './errors.js';
+import { isAllowedOrigin } from './lib/hosts.js';
 
 // Schema files register their types and fields on the shared builder as an
 // import side effect; they must be imported before toSchema() runs.
@@ -31,6 +32,15 @@ async function main() {
 `,
     },
     maskedErrors: { maskError, isDev: !env.isProduction },
+    // Browsers may call this API only from the sites users sign in from.
+    // Auth is a bearer token, not a cookie, so credentials stay off. Requests
+    // without an Origin (curl, same-origin GraphiQL) are unaffected.
+    cors: (request) => {
+      const origin = request.headers.get('origin');
+      if (!origin || !isAllowedOrigin(origin, env.siweDomains)) return false;
+      // Already checked above: '*' makes Yoga echo this Origin back and add `Vary: Origin`.
+      return { origin: '*', methods: ['GET', 'POST', 'OPTIONS'], credentials: false, maxAge: 86400 };
+    },
   });
 
   const server = createServer(yoga);

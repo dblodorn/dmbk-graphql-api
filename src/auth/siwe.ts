@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { verifyMessage } from 'viem';
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe';
 import { env } from '../env.js';
+import { isAllowedHost } from '../lib/hosts.js';
 
 /*
  * Sign-In with Ethereum (EIP-4361), handled by this API directly. The client
@@ -65,8 +66,7 @@ export async function verifySiwe(message: string, signature: string): Promise<st
 
   // The message must be addressed to a site we trust, so a signature a wallet
   // produced for some other site cannot be replayed here.
-  const domain = parsed.domain.toLowerCase();
-  if (!env.siweDomains.includes(domain)) throw fail();
+  if (!isAllowedHost(parsed.domain, env.siweDomains)) throw fail();
 
   // Validity window (expirationTime / notBefore), domain and nonce claims.
   if (!validateSiweMessage({ message: parsed, domain: parsed.domain, nonce: parsed.nonce })) throw fail();

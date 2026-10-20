@@ -14,7 +14,7 @@ npm run build      # also just tsc — tsconfig has noEmit: true, so nothing is 
 - No test suite and no linter; `npm run typecheck` is the only automated check.
 - Code always runs through `tsx` (dev, start, and PM2 via `ecosystem.config.cjs`); there is no compiled output. Prod runs `npm install --omit=dev` and then `npx tsx`, so `tsx` is a devDependency prod needs at runtime.
 - `dev`/`start` load `.env` via `--env-file` (Node errors if the file is missing); PM2 loads it via `env_file`.
-- Env (`src/env.ts`, validated at startup): `MONGODB_URI`, `DO_SPACES_CDN_URL` (required); `JWT_SECRET` (required in production); `ALLOWED_ADDRESSES` (comma-separated admin wallets); `SIWE_DOMAINS` (comma-separated hosts users sign in *from*, e.g. `dmbk.io,localhost:3000`); `PHOTOS_DB_NAME` / `LORA_DB_NAME` (default `dmbk-photos` / `lora-trainer`); `PORT`; `NODE_ENV`.
+- Env (`src/env.ts`, validated at startup): `MONGODB_URI`, `DO_SPACES_CDN_URL` (required); `JWT_SECRET` (required in production); `ALLOWED_ADDRESSES` (comma-separated admin wallets); `SIWE_DOMAINS` (comma-separated hosts users sign in *from*, e.g. `dmbk.io,*.dmbk.io,localhost:3000`; also the CORS allowlist; `*.` matches subdomains, not the apex — `lib/hosts.ts`); `PHOTOS_DB_NAME` / `LORA_DB_NAME` (default `dmbk-photos` / `lora-trainer`); `PORT`; `NODE_ENV`.
 
 ## Deployment
 

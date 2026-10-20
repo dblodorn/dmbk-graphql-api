@@ -27,11 +27,12 @@ Remaining before the first deploy:
 - [x] Database access: the API uses its own Atlas user, `graphql-api`, with `readWrite` on `dmbk-photos` and `lora-trainer` only, scoped to the `dmbk-world` cluster. The apps' users (`dmbk-photos-app`, `lora-trainer-app2`) can each reach only their own database.
   - An older user, `dmbk-graphql-api`, has `readWriteAnyDatabase` and isn't used by this code. Delete it once nothing else depends on it.
 - [ ] Not yet tested: the mutations against live data. This needs a signature from an admin wallet. Signed in as the admin wallet, check that `updatePhoto` changes keyword counts the same way dmbk does (compare the `keywords` collection before and after), and that hide/unhide round-trips.
-- [ ] Set the env vars on the droplet before merging: `MONGODB_URI` (the `graphql-api` user), `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET` (generate a separate one for production). Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI`, `DO_SPACES_CDN_URL` or (in production) `JWT_SECRET`.
-- [ ] Add lora-trainer's domain to `SIWE_DOMAINS`. It isn't cloned locally, so its domain is unknown here.
+- [x] Set the env vars on the droplet before merging (done 2026-10-20, production `JWT_SECRET` generated on the droplet): `MONGODB_URI` (the `graphql-api` user), `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET` (generate a separate one for production). Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI`, `DO_SPACES_CDN_URL` or (in production) `JWT_SECRET`.
+- [x] Add lora-trainer's domain to `SIWE_DOMAINS`: it's `arenatrainer.dmbk.io`, covered by `*.dmbk.io`. Local `.env` now has `dmbk.io,*.dmbk.io,dain.kim,*.dain.kim,db13.us,localhost:3000`; the droplet's `.env` needs the same.
 - [x] Fix `NODE_ENV` in `ecosystem.config.cjs`. It set `development`, which made `JWT_SECRET` optional (falling back to a known dev secret) and returned error details to clients. It now sets `production`, so **`JWT_SECRET` must be in the droplet's `.env` before this deploys**, or the server exits on startup.
-- [ ] Configure CORS in `createYoga`. Yoga's default reflects any origin. Restrict it to the dmbk apexes (`dmbk.io`, `dain.kim`, `db13.us`), the lora-trainer domain, `localhost`, and Vercel previews.
-- [ ] Support patterns in `SIWE_DOMAINS` (for example `*.vercel.app`), mirroring dmbk's `isAllowedHost`. Without that, sign-in fails on Vercel preview URLs.
+- [x] Configure CORS in `createYoga`. It now allows only origins whose host matches `SIWE_DOMAINS` (https, or http for localhost), with credentials off since auth is a bearer token.
+- [x] Support patterns in `SIWE_DOMAINS` (`*.dmbk.io`), mirroring dmbk's `isAllowedHost` (`src/lib/hosts.ts`).
+  - [ ] Vercel previews still can't sign in. `*.vercel.app` was left out on purpose, because anyone can deploy there and get a signature that works here. Options: put previews on a custom subdomain such as `*.preview.dmbk.io`, or list specific preview hosts.
 - [ ] Optional: quiet Yoga's `ERR` logging for expected domain errors such as failed sign-ins and forbidden calls, so real failures stand out in the PM2 logs.
 
 ---
