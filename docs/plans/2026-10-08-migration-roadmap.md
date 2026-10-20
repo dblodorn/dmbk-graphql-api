@@ -10,7 +10,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 | 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Planned — `openspec/changes/google-accounts/` |
 | 2 | Photo upload and delete | Deployed 2026-10-20 |
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
-| 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | Planned |
+| 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | In progress — dmbk admin writes moved (step 2) |
 
 **Phase 1.5 comes before Phase 4's client moves.** It replaces SIWE everywhere: the API signs people in with Google (`signInWithGoogle`), admins are `ADMIN_EMAILS`, LoRA records are owned by `ownerId`, and lora-trainer's crypto payments are removed rather than ported. Phase 1's checklist below is history and still names the SIWE setup it shipped with.
 
@@ -119,6 +119,7 @@ Do this per capability, in this order:
    - Admin sign-in has already moved to this API's Google sessions in Phase 1.5.
 2. **dmbk admin writes.** Edit, hide, upload (after Phase 2) and delete move from tRPC (`features/photos.ts`) to this API's mutations.
    - Before switching upload over, confirm the Space's CORS rules allow `PUT` from every admin origin (`dmbk.io`, previews, `localhost:3000`). The browser PUTs straight to the `uploadUrl`.
+   - Progress (dmbk OpenSpec change `admin-writes-through-graphql-api`): upload, edit, hide and the new delete all call this API's mutations through a same-origin proxy in dmbk (`/api/admin/graphql`), which forwards only Relay persisted operations with the session token from dmbk's HTTP-only cookie. dmbk's tRPC write procedures are deleted, along with its Spaces client and sharp derivatives, and AVIF now finalizes from the admin. dmbk's `pnpm verify:admin` drives its screens against a local server here, using `npm run test:mutations -- --admin-token` for its sessions. Relay is in dmbk for writes only: reads (step 1) and deleting dmbk's `/api/graphql` and tRPC read procedures (step 3) remain.
 3. **Delete dmbk's temporary API.** Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. (better-auth and the SIWE wiring are already gone, in Phase 1.5.)
 4. **dmbk public pages.** Today the server components import `src/lib/photos/repository.ts` directly. Decide whether they read this API too, or keep the direct Mongo read as a deliberately read-only path. dmbk's own design doc leaves this open.
 5. **lora-trainer.** Move reads, then hide/unhide, then (after Phase 3) training and generation. Then delete its tRPC routers and its direct Mongo access.
