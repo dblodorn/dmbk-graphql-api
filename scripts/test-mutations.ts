@@ -6,6 +6,10 @@
  *   npm run dev                         # in another terminal (restart it after --setup)
  *   npm run test:mutations              # against http://localhost:4000/graphql
  *   npm run test:mutations -- --cleanup # deletes fixtures left by a crashed run
+ *   npm run test:mutations -- --admin-token
+ *                                       # prints a session token for the test admin and
+ *                                       # leaves the account in place (for dmbk's
+ *                                       # `pnpm verify:admin`); --cleanup removes it
  *
  * A real Google ID token can't be scripted, so the test accounts and their
  * sessions are created directly in `dmbk-accounts` through better-auth's own
@@ -96,13 +100,13 @@ interface TestAccount {
  * runs exactly as it does for Google; the de-listed one is inserted under it,
  * since the hook would refuse it — which is the point.
  */
-async function createAccounts(): Promise<Record<string, TestAccount>> {
+async function createAccounts(emails: string[] = TEST_EMAILS): Promise<Record<string, TestAccount>> {
   const { getAuth } = await import('../src/auth/better-auth.js');
   const { env } = await import('../src/env.js');
   const ctx = await getAuth().$context;
 
   const out: Record<string, TestAccount> = {};
-  for (const email of TEST_EMAILS) {
+  for (const email of emails) {
     const found = await ctx.internalAdapter.findUserByEmail(email);
     let userId = found?.user.id;
     if (!userId) {
@@ -556,6 +560,23 @@ async function main(): Promise<void> {
   if (process.argv.includes('--cleanup')) {
     await mongoose.disconnect();
     return cleanup();
+  }
+
+  // For another app's end-to-end run (dmbk's `pnpm verify:admin`), which drives
+  // its admin screens against a local server and needs a real admin session to
+  // do it. Only the token goes to stdout, so a caller can capture it; the
+  // account stays until --cleanup, since the caller's run outlives this one.
+  if (process.argv.includes('--admin-token')) {
+    try {
+      const admin = (await createAccounts([ADMIN_EMAIL]))[ADMIN_EMAIL];
+      if (!(await ok(VIEWER, {}, admin.token)).viewer?.isAdmin) {
+        throw new Error(`${ADMIN_EMAIL} is not an admin on ${API_URL}. Run --setup and restart the local server.`);
+      }
+      process.stdout.write(`${admin.token}\n`);
+    } finally {
+      await mongoose.disconnect();
+    }
+    return;
   }
 
   console.log(`API ${API_URL}`);
