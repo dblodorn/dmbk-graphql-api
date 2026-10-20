@@ -4,7 +4,7 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
 
 ## 0. Setup (no code)
 
-- [ ] 0.1 In Google Cloud, create or reuse a web OAuth client. Add authorized JavaScript origins: `https://dmbk.io`, the other dmbk apexes, `https://arenatrainer.dmbk.io`, `http://localhost:3000`. Record `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+- [x] 0.1 In Google Cloud, create or reuse a web OAuth client. Add authorized JavaScript origins: `https://dmbk.io`, the other dmbk apexes, `https://arenatrainer.dmbk.io`, `http://localhost:3000`. Record `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 - [x] 0.2 In Atlas, grant the `graphql-api` user `readWrite` on `dmbk-accounts`.
 - [x] 0.3 Spike: on the installed better-auth version, confirm how to call Google ID-token sign-in from the server API and how to get the `bearer` session token back. Write the exact calls into design.md.
 
@@ -47,7 +47,10 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
   - The roadmap's Phase 3–4 wording.
 - [x] 1.11 `npm run typecheck`. Grep the repo (excluding `node_modules`, `openspec/`) for `siwe|SIWE|ALLOWED_ADDRESSES|jwt|viem`: no matches.
 - [ ] 1.12 Set the new env vars on the droplet and remove the old ones. Then merge, deploy, and sign in with Google once to create the owner's user.
-- [ ] 1.13 Run the backfill, dry-run first and then `--apply`. Re-run the dry-run: it should report 0 records missing `ownerId`.
+  - [x] New vars set on the droplet (2026-10-20, `BETTER_AUTH_SECRET` generated there). Backup: `.env.bak-20261020-184748`.
+  - [ ] Merge and deploy. Check that `signInWithGoogle` works against `https://graphql.dmbk.network`.
+  - [ ] Then remove `JWT_SECRET`, `ALLOWED_ADDRESSES` and `SIWE_DOMAINS` from the droplet. The SIWE code that's live now needs `JWT_SECRET` to start, so they stay until this deploys.
+- [x] 1.13 Run the backfill, dry-run first and then `--apply`. Re-run the dry-run: it should report 0 records missing `ownerId`. Done 2026-10-20, before the deploy: the owner signed in locally against the shared `dmbk-accounts` (user `6ad7b8425c419c7374acaab4`), and 16 trainings and 352 images were mapped from `0xbfaa…c06c`.
 
 ## 2. dmbk PR (`dblodorn/dmbk`)
 
