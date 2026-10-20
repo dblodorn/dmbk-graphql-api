@@ -7,9 +7,12 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Relay reads, SIWE sign-in, curation mutations | Deployed 2026-10-20 at `graphql.dmbk.network` |
+| 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Planned — `openspec/changes/google-accounts/` |
 | 2 | Photo upload and delete | Planned |
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | Planned |
+
+**Phase 1.5 comes before Phase 4's client moves.** It replaces SIWE everywhere, so where Phases 3–4 below mention SIWE tokens, `ALLOWED_ADDRESSES`, wallet ownership or payment exemption, read them as Google sessions, `ADMIN_EMAILS`, `ownerId`, and nothing (payments are removed). Those sections get rewritten in the change's task 1.10.
 
 ---
 
