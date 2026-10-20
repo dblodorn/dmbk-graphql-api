@@ -26,7 +26,7 @@ Account creation SHALL be refused unless the Google email is verified and listed
 
 #### Scenario: Stranger refused without trace
 - **WHEN** a verified Google account not on `ALLOWED_EMAILS` calls `signInWithGoogle`
-- **THEN** the mutation fails with a forbidden error and `dmbk-accounts` gains no records
+- **THEN** the mutation fails with the same generic `UNAUTHENTICATED` error as any other refused sign-in, and `dmbk-accounts` gains no records
 
 #### Scenario: Unverified email refused
 - **WHEN** Google reports the account's email as unverified, even if the address is on `ALLOWED_EMAILS`

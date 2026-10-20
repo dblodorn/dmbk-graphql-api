@@ -1,6 +1,5 @@
 import { builder } from './builder.js';
-import { issueNonce, verifySiwe } from '../auth/siwe.js';
-import { issueToken, viewerFor, type Viewer } from '../auth/token.js';
+import { signInWithGoogle, signOut, type Viewer } from '../auth/viewer.js';
 import { setPhotoHidden, updatePhoto } from '../lib/photos/repository.js';
 import { setImageHidden, setTrainingHidden } from '../lib/lora/repository.js';
 import { PhotoRef } from './types/photo.js';
@@ -22,36 +21,35 @@ builder.mutationType({});
 // ---------------------------------------------------------------------------
 // Auth
 
-builder.mutationField('siweNonce', (t) =>
-  t.string({
-    description: 'A single-use nonce to embed in a SIWE message. Expires after 10 minutes.',
-    resolve: () => issueNonce(),
-  }),
-);
-
 builder.relayMutationField(
-  'signInWithEthereum',
+  'signInWithGoogle',
   {
     inputFields: (t) => ({
-      message: t.string({ required: true, description: 'The EIP-4361 message the wallet signed.' }),
-      signature: t.string({ required: true }),
+      idToken: t.string({
+        required: true,
+        description: 'A Google ID token (Google Identity Services `credential`) issued to this API\'s OAuth client.',
+      }),
     }),
   },
   {
-    resolve: async (_root, { input }) => {
-      const address = await verifySiwe(input.message, input.signature);
-      return { token: issueToken(address), viewer: viewerFor(address) };
-    },
+    resolve: async (_root, { input }) => signInWithGoogle(input.idToken),
   },
   {
     outputFields: (t) => ({
       token: t.string({
-        description: 'Send as `Authorization: Bearer <token>`. Valid for 7 days.',
+        description: 'Send as `Authorization: Bearer <token>`. Revoked by `signOut`.',
         resolve: (payload) => payload.token,
       }),
       viewer: t.field({ type: ViewerRef, resolve: (payload: { viewer: Viewer }) => payload.viewer }),
     }),
   },
+);
+
+builder.mutationField('signOut', (t) =>
+  t.boolean({
+    description: "Revoke this request's session. False when there was no valid session to revoke.",
+    resolve: (_root, _args, context) => signOut(context.request),
+  }),
 );
 
 // ---------------------------------------------------------------------------

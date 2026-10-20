@@ -2,7 +2,7 @@ import { GraphQLError } from 'graphql';
 import { InvalidInputError } from './lib/cursor.js';
 import { PhotoNotFoundError } from './lib/photos/repository.js';
 import { ForbiddenError, LoraNotFoundError } from './lib/lora/repository.js';
-import { SiweError } from './auth/siwe.js';
+import { AuthError } from './auth/viewer.js';
 
 /**
  * Domain errors a caller can act on, mapped to GraphQL error codes in one
@@ -14,7 +14,7 @@ const CODES: [new (...args: never[]) => Error, string][] = [
   [PhotoNotFoundError, 'NOT_FOUND'],
   [LoraNotFoundError, 'NOT_FOUND'],
   [ForbiddenError, 'FORBIDDEN'],
-  [SiweError, 'UNAUTHENTICATED'],
+  [AuthError, 'UNAUTHENTICATED'],
 ];
 
 export function forbidden(message: string): GraphQLError {

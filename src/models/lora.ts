@@ -14,7 +14,10 @@ export type LoraStatus = 'pending' | 'completed' | 'failed';
 export interface LoraTrainingDoc {
   _id: string;
   requestId: string;
-  walletAddress: string;
+  /** The owning account's user id (`dmbk-accounts`). Missing until backfilled. */
+  ownerId?: string;
+  /** Pre-accounts owner. Kept as history, no longer exposed or written. */
+  walletAddress?: string;
   triggerWord: string;
   steps: number;
   /** Original upload URLs (fal.ai). */
@@ -34,7 +37,10 @@ export interface LoraTrainingDoc {
 export interface GeneratedImageDoc {
   _id: string;
   loraTrainingId: string;
-  walletAddress: string;
+  /** The account that generated it — not necessarily the LoRA's owner. */
+  ownerId?: string;
+  /** Pre-accounts owner. Kept as history, no longer exposed or written. */
+  walletAddress?: string;
   prompt: string;
   /** fal.ai URL. Prefer `cdnUrl` when present. */
   imageUrl: string;
@@ -54,7 +60,8 @@ const loraTrainingSchema = new Schema<LoraTrainingDoc>(
   {
     _id: { type: String, required: true },
     requestId: { type: String, required: true },
-    walletAddress: { type: String, required: true },
+    ownerId: { type: String },
+    walletAddress: { type: String },
     triggerWord: { type: String, required: true },
     steps: { type: Number, required: true },
     imageUrls: { type: [String], default: [] },
@@ -74,7 +81,8 @@ const generatedImageSchema = new Schema<GeneratedImageDoc>(
   {
     _id: { type: String, required: true },
     loraTrainingId: { type: String, required: true },
-    walletAddress: { type: String, required: true },
+    ownerId: { type: String },
+    walletAddress: { type: String },
     prompt: { type: String, required: true },
     imageUrl: { type: String, required: true },
     cdnUrl: { type: String, default: null },

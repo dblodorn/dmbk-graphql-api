@@ -31,7 +31,7 @@ Client (Relay) → graphql.dmbk.network:443
 | Database | **MongoDB** (Mongoose) | Flexible schema, Atlas free tier for small projects, well-typed with TypeScript. |
 | Batching | **DataLoader** (per-request cache) | Eliminates N+1 within a single query. No Redis needed for small throughput. |
 | Caching | **mongoose-plugin-cache** (optional) | Redis-backed cache-through layer for hot models. Not installed by default — add when needed. |
-| Auth | **JWT** + **@pothos/plugin-scope-auth** | Token-based. Field-level and type-level auth scopes. |
+| Auth | **better-auth** (Google, bearer sessions) + **@pothos/plugin-scope-auth** | Accounts in `dmbk-accounts`, revocable sessions. Field-level and type-level auth scopes. |
 | Proxy | **Caddy** | Auto TLS, effortless reverse proxy config. |
 | Deploy | **PM2** | Process management, auto-restart on crash. |
 
@@ -58,17 +58,24 @@ Create a `.env` file in the project root:
 ```env
 PORT=4000
 NODE_ENV=development
-JWT_SECRET=your-random-secret-here
 # The dmbk-world cluster. The database is chosen per collection (below), not by this URI.
 MONGODB_URI=mongodb+srv://user:password@cluster.xxxxx.mongodb.net/
 PHOTOS_DB_NAME=dmbk-photos      # default
 LORA_DB_NAME=lora-trainer       # default
 # Public base for photo derivatives — same value as the dmbk app's DO_SPACES_CDN_URL
 DO_SPACES_CDN_URL=https://...
-# Wallets allowed to curate photos (comma-separated)
-ALLOWED_ADDRESSES=0x...
-# Hosts users sign in from; a SIWE message naming any other domain is rejected
-SIWE_DOMAINS=dmbk.io,localhost:3000
+# Accounts. Signs session tokens; required in production.
+BETTER_AUTH_SECRET=your-random-secret-here
+BETTER_AUTH_URL=http://localhost:4000   # https://graphql.dmbk.network in production
+ACCOUNTS_DB_NAME=dmbk-accounts          # default
+# The web OAuth client every app signs in through; required in production
+GOOGLE_CLIENT_ID=...apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=...
+# Who may sign in, and who may curate photos (comma-separated; empty admits nobody)
+ALLOWED_EMAILS=you@example.com
+ADMIN_EMAILS=you@example.com
+# Hosts allowed to call this API from a browser (CORS)
+ALLOWED_ORIGINS=dmbk.io,*.dmbk.io,localhost:3000
 ```
 
 ### Development
@@ -95,7 +102,7 @@ pm2 start ecosystem.config.cjs
 
 The API serves content owned by two other apps on the same Atlas cluster: the photo library, keyword vocabulary and SoundCloud snapshot from `dmbk-photos` ([dmbk](https://github.com/dblodorn/dmbk)), and LoRA trainings and generated images from `lora-trainer` ([lora-trainer](https://github.com/dblodorn/lora-trainer)).
 
-Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `loraTrainerSetImageHidden`). Auth and Relay fields (`viewer`, `node`, `siweNonce`, `signInWithEthereum`) have no prefix.
+Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `loraTrainerSetImageHidden`). Auth and Relay fields (`viewer`, `node`, `signInWithGoogle`, `signOut`) have no prefix.
 
 ### Queries
 
@@ -107,20 +114,20 @@ Fields that read or write one of those databases are prefixed with its name in c
 | `dmbkPhotosKeywords` | none | Photo keyword vocabulary with counts. |
 | `loraTrainerTrainings` | none | Completed, visible LoRA trainings; each has an `images` connection. |
 | `dmbkPhotosSoundPlaylists` | none | Latest cached SoundCloud playlists. |
-| `viewer` | JWT | The signed-in wallet, with its own `loraTrainerTrainings` and `loraTrainerImages` (including hidden). |
+| `viewer` | session | The signed-in account (`id`, `email`, `name`, `isAdmin`), with its own `loraTrainerTrainings` and `loraTrainerImages` (including hidden). |
 
 ### Mutations
 
 | Field | Auth | Type | Description |
 |-------|------|------|-------------|
-| `siweNonce` | none | Standard | Single-use nonce for a SIWE message. |
-| `signInWithEthereum` | none | Relay | Verify a signed SIWE message; returns a 7-day JWT. |
+| `signInWithGoogle` | none | Relay | Trade a Google ID token for a session token. |
+| `signOut` | session | Standard | Revoke the current session. |
 | `dmbkPhotosUpdatePhoto` | admin | Relay | Replace a photo's title and/or keywords. |
 | `dmbkPhotosSetPhotoHidden` | admin | Relay | Hide or unhide a photo. |
 | `loraTrainerSetTrainingHidden` | owner | Relay | Hide or unhide one of your LoRA trainings. |
 | `loraTrainerSetImageHidden` | owner | Relay | Hide or unhide an image you generated. |
 
-Admin = a wallet in `ALLOWED_ADDRESSES`. Owner = the wallet stored on the record.
+Admin = an account whose email is in `ADMIN_EMAILS`. Owner = the account named by the record's `ownerId`.
 
 ### Relay Compatibility
 
@@ -133,11 +140,11 @@ The API implements the [Relay Server Specification](https://relay.dev/docs/guide
 
 ### Authentication
 
-Sign in with Ethereum (EIP-4361):
+Sign in with Google:
 
-1. `mutation { siweNonce }`
-2. Have the wallet sign a SIWE message containing that nonce, with `domain` set to the site the user is on (must be listed in `SIWE_DOMAINS`).
-3. `signInWithEthereum(input: { message, signature })` returns a token.
+1. In the browser, get an ID token from [Google Identity Services](https://developers.google.com/identity/gsi/web) for this API's OAuth client (`GOOGLE_CLIENT_ID`). The site's origin must be an authorized JavaScript origin on that client.
+2. `signInWithGoogle(input: { idToken })` returns a session token. Only verified emails listed in `ALLOWED_EMAILS` can sign in.
+3. `signOut` revokes it.
 
 Then include it in the `Authorization` header:
 
@@ -155,7 +162,7 @@ src/
 ├── env.ts                # Validated configuration
 ├── errors.ts             # Domain error → GraphQL error code mapping
 ├── context.ts            # Per-request viewer + visibility-scoped DataLoaders
-├── auth/                 # SIWE verification, JWT issue/verify
+├── auth/                 # better-auth (Google, bearer sessions), allowlists, viewer
 ├── db/mongoose.ts        # One connection, a handle per database
 ├── models/               # Mongoose schemas mirroring the owning apps' documents
 ├── lib/                  # Repositories: every query, write and visibility rule

@@ -30,14 +30,22 @@
 
 ## Decisions
 
-**better-auth inside the API rather than hand-rolled ID-token verification.** A hand-rolled version would be `jose` against Google's JWKS plus a `users` upsert, which is smaller today. better-auth is chosen because it's what sigil and both apps already use, it stores revocable sessions, and it covers the later goals with plugins rather than new code: more providers, account linking, admin roles and Stripe. Mount it with `toNodeHandler` under `/api/auth/*` next to Yoga. Build it lazily from the existing Mongoose connection (`mongoose.connection.getClient().db(ACCOUNTS_DB_NAME)`), and keep `autoIndex` off: run the indexes better-auth needs once from a script.
+**better-auth inside the API rather than hand-rolled ID-token verification.** A hand-rolled version would be `jose` against Google's JWKS plus a `users` upsert, which is smaller today. better-auth is chosen because it's what sigil and both apps already use, it stores revocable sessions, and it covers the later goals with plugins rather than new code: more providers, account linking, admin roles and Stripe. Build it lazily from the existing Mongoose connection (`mongoose.connection.getClient().db(ACCOUNTS_DB_NAME)`); both use the same `mongodb` 7.7 driver. better-auth's adapter creates its own indexes in `dmbk-accounts`. That doesn't conflict with the global `autoIndex: false`, which exists because other apps own the photo and LoRA databases, so no index script is needed.
+
+**better-auth's HTTP routes are not mounted.** Everything the API needs is a server-side call (`signInSocial`, `getSession`, `signOut`), so `toNodeHandler` isn't used and none of better-auth's other endpoints are reachable. That also makes `trustedOrigins` and CSRF checks moot: the API never sets or reads a cookie, and Yoga's CORS (`ALLOWED_ORIGINS`) is the only browser-facing gate.
 
 **ID-token sign-in, bearer session, exposed as a GraphQL mutation.** The browser gets a Google ID token with Google Identity Services and calls `signInWithGoogle(idToken)`. The resolver calls better-auth's server API (`signInSocial` with `provider: "google"` and `idToken`), which checks the token's audience against `GOOGLE_CLIENT_ID`, and the mutation returns the session token from the `bearer` plugin. Clients send `Authorization: Bearer <token>` exactly as they do now. This avoids redirect flows and third-party cookies, and keeps the clients talking only GraphQL.
 - Rejected: OAuth redirects through the API. That needs a cookie on `graphql.dmbk.network` or a one-time-token hand-off.
 - Rejected: better-auth in each app. That's the split being removed.
-- First task: a spike to confirm the exact better-auth call and how the bearer token is returned (`returnHeaders` / `set-auth-token`) on the installed version.
+- Spike result (better-auth 1.7.12):
+  - `auth.api.signInSocial({ body: { provider: 'google', idToken: { token } }, returnHeaders: true })` verifies the token against Google's JWKS, checking the issuer, the audience (`GOOGLE_CLIENT_ID`) and the signature. It creates or finds the user, which runs `user.create.before`, then creates a session.
+  - The `bearer` plugin's after-hook puts the **signed** session token in the `set-auth-token` response header. The body's `token` is the bare session id. With `bearer({ requireSignature: true })` only the signed form is accepted, so the API returns the header value.
+  - `auth.api.getSession({ headers })` and `auth.api.signOut({ headers })` with `Authorization: Bearer <signed>` work through the bearer plugin's before-hook.
+  - User ids are ObjectId hex strings, which is what `ownerId` stores.
 
 **SIWE is removed outright, not phased out.** No client calls this API yet, so there's no consumer to protect. This API's SIWE code (`src/auth/siwe.ts`, `token.ts`, the JWT, `viem`) goes in the same PR that adds Google sign-in. The apps' own SIWE setups are separate and keep working until each app's PR replaces them.
+
+**Sign-in failures are all one generic error.** Bad token, wrong audience, unverified email or not on the list: each returns `AuthError('Sign-in failed.')` with code `UNAUTHENTICATED`, as SIWE did, so a caller can't probe which check failed. The server log says which.
 
 **Context resolves the session per request.** `getViewerFromRequest` becomes async: `auth.api.getSession({ headers })`. Any failure means anonymous, never an error, as today. `isAdmin` is `ADMIN_EMAILS.has(email)` on every request and is never stored. That costs one indexed session lookup per request, which is fine for a single PM2 process. Add a short in-process cache only if it shows up in latency.
 

@@ -5,16 +5,18 @@ import {
   type GeneratedImageDoc,
 } from '../../models/lora.js';
 import { paginate, type Page, type PageArgs } from '../cursor.js';
-import type { Viewer } from '../../auth/token.js';
+import type { Viewer } from '../../auth/viewer.js';
 
 /*
  * Every lora-trainer query goes through this module, and visibility is decided
  * here only.
  *
  * Public: trainings that are `completed` and not hidden; images that are not
- * hidden. An owner — the wallet in the record's own `walletAddress` — also sees
- * their own hidden or unfinished records. Ownership is per record: any wallet
- * may generate images on any public LoRA, so an image's owner is whoever
+ * hidden. An owner — the account named by the record's own `ownerId` — also
+ * sees their own hidden or unfinished records. A record without `ownerId`
+ * (written by lora-trainer before it moved to accounts, and not yet backfilled
+ * by `scripts/backfill-owner-id.ts`) has no owner. Ownership is per record: any
+ * account may generate images on any public LoRA, so an image's owner is whoever
  * generated it, not the LoRA's trainer.
  *
  * `hidden` is matched with `$ne: true` rather than `false` because lora-trainer
@@ -37,14 +39,12 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** Wallet addresses are compared case-insensitively; stored casing varies. */
-export function isOwner(viewer: Viewer | null, doc: { walletAddress: string }): boolean {
-  return viewer !== null && viewer.address === doc.walletAddress.toLowerCase();
+export function isOwner(viewer: Viewer | null, doc: { ownerId?: string | null }): boolean {
+  return viewer !== null && !!doc.ownerId && doc.ownerId === viewer.id;
 }
 
-function ownerFilter(address: string): Record<string, unknown> {
-  const escaped = address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return { walletAddress: { $regex: `^${escaped}$`, $options: 'i' } };
+function ownerFilter(viewer: Viewer): Record<string, unknown> {
+  return { ownerId: viewer.id };
 }
 
 function hiddenFilter(visibility: LoraVisibility): Record<string, unknown> {
@@ -76,7 +76,7 @@ export function listOwnTrainings(
   visibility: LoraVisibility,
   args: PageArgs,
 ): Promise<Page<LoraTrainingDoc>> {
-  return paginate(args, { ...ownerFilter(viewer.address), ...hiddenFilter(visibility) }, (filter, limit) =>
+  return paginate(args, { ...ownerFilter(viewer), ...hiddenFilter(visibility) }, (filter, limit) =>
     LoraTrainingModel.find(filter).sort(newestFirst).limit(limit).lean<LoraTrainingDoc[]>().exec(),
   );
 }
@@ -94,7 +94,7 @@ export function listOwnImages(
   visibility: LoraVisibility,
   args: PageArgs,
 ): Promise<Page<GeneratedImageDoc>> {
-  return paginate(args, { ...ownerFilter(viewer.address), ...hiddenFilter(visibility) }, (filter, limit) =>
+  return paginate(args, { ...ownerFilter(viewer), ...hiddenFilter(visibility) }, (filter, limit) =>
     GeneratedImageModel.find(filter).sort(newestFirst).limit(limit).lean<GeneratedImageDoc[]>().exec(),
   );
 }

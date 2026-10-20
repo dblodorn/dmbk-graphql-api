@@ -12,7 +12,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | Planned |
 
-**Phase 1.5 comes before Phase 4's client moves.** It replaces SIWE everywhere, so where Phases 3–4 below mention SIWE tokens, `ALLOWED_ADDRESSES`, wallet ownership or payment exemption, read them as Google sessions, `ADMIN_EMAILS`, `ownerId`, and nothing (payments are removed). Those sections get rewritten in the change's task 1.10.
+**Phase 1.5 comes before Phase 4's client moves.** It replaces SIWE everywhere: the API signs people in with Google (`signInWithGoogle`), admins are `ADMIN_EMAILS`, LoRA records are owned by `ownerId`, and lora-trainer's crypto payments are removed rather than ported. Phase 1's checklist below is history and still names the SIWE setup it shipped with.
 
 ---
 
@@ -88,14 +88,14 @@ Known so far (from `features/lora.ts`, `generate.ts`, `slideshow.ts`):
 - **Training.** `createPendingLora` inserts a `pending` record; later, a client-called `lora.complete` mirrors the weights to Spaces (`lora-trainer/loras/{id}/{id}.{ext}`) and backfills the training images into Spaces.
   - Completion is driven by the client today. Decide whether this API should take a fal.ai webhook instead.
 - **Generation.** `generate.images` calls `fal.subscribe("fal-ai/flux-lora")` with 4 images per batch.
-  - Rate limit: 8 batches per 24 hours per wallet, unless `isPaymentExempt`.
+  - lora-trainer's per-wallet rate limit (8 batches a day, unless payment-exempt) is removed in Phase 1.5. Quotas, if any, come back with open sign-up and payments, keyed on `ownerId`.
   - Each image is mirrored to `lora-trainer/images/{loraId}/{id}.{ext}`, keeping both `imageUrl` (fal) and `cdnUrl` (Spaces).
   - The call blocks for the whole generation. Decide between a long-running mutation (raise timeouts in Caddy) and returning `pending` records that the client polls or subscribes to.
 - **Remaining quota.** `generate.remaining` becomes a `Viewer` field (`viewer.loraTrainerRemainingGenerations`).
 - **Slideshow.** `slideshow.randomImages` becomes a query (`loraTrainerSlideshowImages`). Unlike the original, it should exclude hidden images and hidden trainings.
 - **Covered by Phase 1 already.** lora-trainer's `listHidden`, `listHiddenImages`, `getById` and `listByLora` map to `viewer.loraTrainerTrainings`, `viewer.loraTrainerImages`, `node` and `LoraTraining.images`. The new versions don't have the original leaks: anyone could read hidden records or list hidden items by wallet.
 
-Needs: `FAL_KEY`, the Spaces credentials from Phase 2, and the payment-exemption list.
+Needs: `FAL_KEY` and the Spaces credentials from Phase 2. (`payment.ts` is deleted in Phase 1.5, so there's nothing to port from it.)
 
 ---
 
@@ -106,9 +106,9 @@ Do this per capability, in this order:
 1. **dmbk admin gallery reads.**
    - Today it calls dmbk's own `/api/graphql` (`src/server/graphql/`) with hand-written types.
    - Point it at this API with Relay, and add the Relay compiler to dmbk.
-   - Admin sign-in moves from better-auth cookies to this API's SIWE token. The admin wallets must be in this API's `ALLOWED_ADDRESSES`.
+   - Admin sign-in has already moved to this API's Google sessions in Phase 1.5.
 2. **dmbk admin writes.** Edit, hide, upload (after Phase 2) and delete move from tRPC (`features/photos.ts`) to this API's mutations.
-3. **Delete dmbk's temporary API.** Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. Remove better-auth and the SIWE wiring if nothing else uses them.
+3. **Delete dmbk's temporary API.** Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. (better-auth and the SIWE wiring are already gone, in Phase 1.5.)
 4. **dmbk public pages.** Today the server components import `src/lib/photos/repository.ts` directly. Decide whether they read this API too, or keep the direct Mongo read as a deliberately read-only path. dmbk's own design doc leaves this open.
 5. **lora-trainer.** Move reads, then hide/unhide, then (after Phase 3) training and generation. Then delete its tRPC routers and its direct Mongo access.
 
@@ -118,4 +118,4 @@ Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/li
 
 - Should `loraWeightsUrl` stay public, as it is in lora-trainer, or become owner-only?
 - Should the user and session collections in both databases eventually be dropped, once better-auth is gone from both apps?
-- Is horizontal scaling ever needed? SIWE nonces live in process memory, which is only correct for the single PM2 process.
+- Is horizontal scaling ever needed? Sessions are in `dmbk-accounts`, so auth no longer pins the API to one process.

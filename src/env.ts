@@ -46,15 +46,34 @@ export const env = {
   /** Photos store storage keys; public URLs are this base + key. No trailing slash. */
   cdnUrl: required('DO_SPACES_CDN_URL').replace(/\/+$/, ''),
 
-  /** A dev fallback is tolerated locally only — production must set it. */
-  jwtSecret: isProduction ? required('JWT_SECRET') : process.env.JWT_SECRET || 'dev-secret-change-in-production',
-
-  /** Lowercased wallet addresses that may curate the photo library. */
-  adminAddresses: list('ALLOWED_ADDRESSES'),
   /**
-   * Hosts a SIWE message may name as its `domain` — the sites users sign in
-   * from (e.g. dmbk.io, *.dmbk.io, localhost:3000), not this API's own host.
-   * The same list is the CORS allowlist. Pattern rules: `lib/hosts.ts`.
+   * Accounts (users, Google accounts, sessions) live in a database this API
+   * owns, unlike the two above. better-auth creates its own collections and
+   * indexes there.
    */
-  siweDomains: hostPatterns('SIWE_DOMAINS'),
+  accountsDbName: process.env.ACCOUNTS_DB_NAME || 'dmbk-accounts',
+  /** Signs session tokens. A dev fallback is tolerated locally only. */
+  authSecret: isProduction
+    ? required('BETTER_AUTH_SECRET')
+    : process.env.BETTER_AUTH_SECRET || 'dev-secret-change-in-production-0000',
+  /** This API's own public URL (https://graphql.dmbk.network in production). */
+  authUrl: process.env.BETTER_AUTH_URL || `http://localhost:${process.env.PORT || '4000'}`,
+  /**
+   * The web OAuth client every app signs in through. ID tokens must name it as
+   * their audience. Unset locally means Google sign-in is unavailable, not that
+   * the server refuses to start.
+   */
+  googleClientId: isProduction ? required('GOOGLE_CLIENT_ID') : process.env.GOOGLE_CLIENT_ID?.trim() || '',
+  googleClientSecret: isProduction ? required('GOOGLE_CLIENT_SECRET') : process.env.GOOGLE_CLIENT_SECRET?.trim() || '',
+
+  /** Who may sign in at all. Empty admits nobody (`auth/allowlist.ts`). */
+  allowedEmails: new Set(list('ALLOWED_EMAILS')),
+  /** Who may curate the photo library. Checked on every request. */
+  adminEmails: new Set(list('ADMIN_EMAILS')),
+
+  /**
+   * Hosts of the sites that call this API from a browser (e.g. dmbk.io,
+   * *.dmbk.io, localhost:3000) — the CORS allowlist. Pattern rules: `lib/hosts.ts`.
+   */
+  allowedOrigins: hostPatterns('ALLOWED_ORIGINS'),
 } as const;

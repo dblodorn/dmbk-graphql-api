@@ -1,57 +1,64 @@
 /*
  * End-to-end check of the mutations against live data, through the API.
  *
- *   npm run test:mutations -- --setup   # once: writes TEST_PRIVATE_KEY to .env,
- *                                       # adds its address to the local ALLOWED_ADDRESSES
+ *   npm run test:mutations -- --setup   # once: adds the test accounts' emails to the
+ *                                       # local ALLOWED_EMAILS / ADMIN_EMAILS in .env
  *   npm run dev                         # in another terminal (restart it after --setup)
  *   npm run test:mutations              # against http://localhost:4000/graphql
- *   npm run test:mutations -- --cleanup # deletes LoRA fixtures left by a crashed run
+ *   npm run test:mutations -- --cleanup # deletes fixtures left by a crashed run
  *
- * The test wallet is an admin only on the server whose ALLOWED_ADDRESSES lists
- * it — keep that to your local .env, never production. The local server reads
- * and writes the live Atlas data, so every change made here is restored:
+ * A real Google ID token can't be scripted, so the test accounts and their
+ * sessions are created directly in `dmbk-accounts` through better-auth's own
+ * adapter, and the bearer tokens are signed the way `signInWithGoogle` returns
+ * them. The accounts use `.invalid` addresses and are admitted only by a
+ * server whose ALLOWED_EMAILS lists them — keep that to your local .env, never
+ * production. They are deleted at the end of every run.
+ *
+ * The local server reads and writes the live Atlas data, so every change made
+ * here is restored:
  *
  * - Photos: picks a public photo, adds a uniquely named keyword and a title,
  *   checks the vocabulary counts move exactly as dmbk's rules say, restores it,
  *   then hides/unhides it the same way. The full vocabulary must end where it
  *   started. The photo's `updatedAt` is the one thing left changed.
- * - LoRA: the test wallet owns nothing real, so a pending (never public)
+ * - LoRA: the test account owns nothing real, so a pending (never public)
  *   training and a hidden image owned by it are inserted directly, used for the
  *   owner checks, and deleted. The image is public for the moment it is unhidden.
- * - Auth: anonymous and non-admin callers must be refused.
+ * - Auth: anonymous, non-admin, de-listed and signed-out callers must be refused.
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
-import { createSiweMessage } from 'viem/siwe';
+import { serializeSignedCookie } from 'better-call';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000/graphql';
-// Must be in the target server's SIWE_DOMAINS.
-const SIWE_DOMAIN = process.env.TEST_SIWE_DOMAIN ?? 'localhost:3000';
 const FIXTURE_PROMPT = 'graphql-api mutation test fixture';
+const FIXTURE_TRIGGER = 'graphqlapitest';
+
+const ADMIN_EMAIL = 'graphql-api-test-admin@example.invalid';
+const MEMBER_EMAIL = 'graphql-api-test-member@example.invalid';
+/** Has a user and a session but is not on ALLOWED_EMAILS: a removed account. */
+const DELISTED_EMAIL = 'graphql-api-test-delisted@example.invalid';
+const TEST_EMAILS = [ADMIN_EMAIL, MEMBER_EMAIL, DELISTED_EMAIL];
 
 // ---------------------------------------------------------------------------
 // Setup / cleanup modes
 
+function addToList(envText: string, name: string, email: string): string {
+  const line = envText.match(new RegExp(`^${name}=(.*)$`, 'm'));
+  const list = (line?.[1] ?? '').split(',').map((a) => a.trim().toLowerCase()).filter(Boolean);
+  if (list.includes(email)) return envText;
+  const next = `${name}=${[...list, email].join(',')}`;
+  return line ? envText.replace(new RegExp(`^${name}=.*$`, 'm'), next) : envText.replace(/\n?$/, '\n') + next + '\n';
+}
+
 function setup(): void {
   const envText = fs.readFileSync('.env', 'utf8');
-  const existing = envText.match(/^TEST_PRIVATE_KEY=(0x[0-9a-fA-F]{64})\s*$/m)?.[1];
-  const key = (existing ?? generatePrivateKey()) as `0x${string}`;
-  const address = privateKeyToAccount(key).address.toLowerCase();
-
-  let next = envText;
-  if (!existing) next = next.replace(/\n?$/, '\n') + `TEST_PRIVATE_KEY=${key}\n`;
-
-  const allowed = next.match(/^ALLOWED_ADDRESSES=(.*)$/m);
-  const list = (allowed?.[1] ?? '').split(',').map((a) => a.trim().toLowerCase()).filter(Boolean);
-  if (!list.includes(address)) {
-    const line = `ALLOWED_ADDRESSES=${[...list, address].join(',')}`;
-    next = allowed ? next.replace(/^ALLOWED_ADDRESSES=.*$/m, line) : next.replace(/\n?$/, '\n') + line + '\n';
-  }
-
+  let next = addToList(envText, 'ALLOWED_EMAILS', ADMIN_EMAIL);
+  next = addToList(next, 'ALLOWED_EMAILS', MEMBER_EMAIL);
+  next = addToList(next, 'ADMIN_EMAILS', ADMIN_EMAIL);
   if (next !== envText) fs.writeFileSync('.env', next);
-  console.log(`Test wallet ${address} is in .env (key ${existing ? 'reused' : 'generated'}).`);
-  console.log('Restart `npm run dev` so the server picks up ALLOWED_ADDRESSES.');
+  console.log(`Test accounts are in the local ALLOWED_EMAILS (${ADMIN_EMAIL} also in ADMIN_EMAILS).`);
+  console.log('Restart `npm run dev` so the server picks them up.');
 }
 
 async function withDb<T>(fn: (models: typeof import('../src/models/lora.js')) => Promise<T>): Promise<T> {
@@ -65,13 +72,63 @@ async function withDb<T>(fn: (models: typeof import('../src/models/lora.js')) =>
   }
 }
 
-async function cleanupFixtures(address: string): Promise<void> {
-  // Only documents this script creates: the test wallet's, marked as fixtures.
+interface TestAccount {
+  id: string;
+  token: string;
+}
+
+/**
+ * Create (or reuse) the test users and give each a fresh session. The admin
+ * and member go through better-auth's internal adapter, so the sign-up hook
+ * runs exactly as it does for Google; the de-listed one is inserted under it,
+ * since the hook would refuse it — which is the point.
+ */
+async function createAccounts(): Promise<Record<string, TestAccount>> {
+  const { getAuth } = await import('../src/auth/better-auth.js');
+  const { env } = await import('../src/env.js');
+  const ctx = await getAuth().$context;
+
+  const out: Record<string, TestAccount> = {};
+  for (const email of TEST_EMAILS) {
+    const found = await ctx.internalAdapter.findUserByEmail(email);
+    let userId = found?.user.id;
+    if (!userId) {
+      const data = { email, name: `graphql-api test (${email.split('@')[0]})`, emailVerified: true };
+      const user = email === DELISTED_EMAIL
+        ? await ctx.adapter.create<{ id: string }>({ model: 'user', data: { ...data, createdAt: new Date(), updatedAt: new Date() } })
+        : await ctx.internalAdapter.createUser(data, { method: 'admin' });
+      if (!user) throw new Error(`Could not create ${email}. Run --setup and check ALLOWED_EMAILS in .env.`);
+      userId = user.id;
+    }
+    const session = await ctx.internalAdapter.createSession(userId);
+    // The same signed form the bearer plugin hands back as `set-auth-token`.
+    const signed = decodeURIComponent((await serializeSignedCookie('', session.token, env.authSecret)).replace('=', ''));
+    out[email] = { id: userId, token: signed };
+  }
+  return out;
+}
+
+async function deleteAccounts(): Promise<number> {
+  const { getAuth } = await import('../src/auth/better-auth.js');
+  const ctx = await getAuth().$context;
+  let deleted = 0;
+  for (const email of TEST_EMAILS) {
+    const found = await ctx.internalAdapter.findUserByEmail(email);
+    if (!found) continue;
+    await ctx.internalAdapter.deleteUserSessions(found.user.id);
+    await ctx.internalAdapter.deleteUser(found.user.id);
+    deleted++;
+  }
+  return deleted;
+}
+
+async function cleanup(): Promise<void> {
+  // Only documents this script creates: marked fixtures, and the .invalid test accounts.
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
-    const owner = { walletAddress: address };
-    const images = await GeneratedImageModel.deleteMany({ ...owner, prompt: FIXTURE_PROMPT });
-    const trainings = await LoraTrainingModel.deleteMany({ ...owner, triggerWord: 'graphqlapitest' });
-    console.log(`Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s).`);
+    const images = await GeneratedImageModel.deleteMany({ prompt: FIXTURE_PROMPT });
+    const trainings = await LoraTrainingModel.deleteMany({ triggerWord: FIXTURE_TRIGGER, requestId: /^test-/ });
+    const accounts = await deleteAccounts();
+    console.log(`Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s), ${accounts} test account(s).`);
   });
 }
 
@@ -101,27 +158,6 @@ async function ok<T = any>(query: string, variables: Record<string, unknown> = {
   const { data, errors } = await gql<T>(query, variables, token);
   if (errors?.length) throw new Error(`GraphQL error: ${errors.map((e) => `${e.extensions?.code}: ${e.message}`).join('; ')}`);
   return data as T;
-}
-
-async function signIn(account: PrivateKeyAccount): Promise<{ token: string; isAdmin: boolean }> {
-  const { siweNonce } = await ok<{ siweNonce: string }>('mutation { siweNonce }');
-  const message = createSiweMessage({
-    address: account.address,
-    chainId: 1,
-    domain: SIWE_DOMAIN,
-    nonce: siweNonce,
-    uri: `http://${SIWE_DOMAIN}`,
-    version: '1',
-    statement: 'graphql-api mutation test',
-  });
-  const signature = await account.signMessage({ message });
-  const data = await ok(
-    `mutation($input: SignInWithEthereumInput!) {
-       signInWithEthereum(input: $input) { token viewer { address isAdmin } }
-     }`,
-    { input: { message, signature } },
-  );
-  return { token: data.signInWithEthereum.token, isAdmin: data.signInWithEthereum.viewer.isAdmin };
 }
 
 const globalId = (type: string, id: string) => Buffer.from(`${type}:${id}`).toString('base64');
@@ -264,7 +300,7 @@ async function photoSuite(adminToken: string, otherToken: string): Promise<void>
   }
 }
 
-async function loraSuite(owner: string, ownerToken: string, otherToken: string): Promise<void> {
+async function loraSuite(ownerId: string, ownerToken: string, otherToken: string): Promise<void> {
   console.log('\nLoRA');
 
   const trainingId = crypto.randomBytes(12).toString('hex');
@@ -274,11 +310,11 @@ async function loraSuite(owner: string, ownerToken: string, otherToken: string):
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
     // Pending: never in the public listing. Image starts hidden.
     await LoraTrainingModel.create({
-      _id: trainingId, requestId: `test-${trainingId}`, walletAddress: owner, triggerWord: 'graphqlapitest',
+      _id: trainingId, requestId: `test-${trainingId}`, ownerId, triggerWord: FIXTURE_TRIGGER,
       steps: 1, status: 'pending', hidden: false, createdAt: now,
     });
     await GeneratedImageModel.create({
-      _id: imageId, loraTrainingId: trainingId, walletAddress: owner, prompt: FIXTURE_PROMPT,
+      _id: imageId, loraTrainingId: trainingId, ownerId, prompt: FIXTURE_PROMPT,
       imageUrl: 'https://example.invalid/graphql-api-test.png', hidden: true, createdAt: now,
     });
   });
@@ -310,44 +346,81 @@ async function loraSuite(owner: string, ownerToken: string, otherToken: string):
     check('hidden image null for anonymous', (await ok(NODE, { id: iId })).node === null);
   } finally {
     await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
-      await GeneratedImageModel.deleteOne({ _id: imageId, walletAddress: owner });
-      await LoraTrainingModel.deleteOne({ _id: trainingId, walletAddress: owner });
+      await GeneratedImageModel.deleteOne({ _id: imageId, ownerId });
+      await LoraTrainingModel.deleteOne({ _id: trainingId, ownerId });
     }).catch((e) => console.error('  ! fixture cleanup failed (run --cleanup):', e));
   }
 }
 
 // ---------------------------------------------------------------------------
 
+const VIEWER = '{ viewer { id email isAdmin } }';
+
+async function authSuite(accounts: Record<string, TestAccount>): Promise<void> {
+  console.log('\nAuth');
+  const admin = accounts[ADMIN_EMAIL];
+  const member = accounts[MEMBER_EMAIL];
+  const delisted = accounts[DELISTED_EMAIL];
+
+  const me = (await ok(VIEWER, {}, admin.token)).viewer;
+  check('admin session resolves as admin', me?.id === admin.id && me.email === ADMIN_EMAIL && me.isAdmin === true, me);
+  const m = (await ok(VIEWER, {}, member.token)).viewer;
+  check('member session resolves as non-admin', m?.id === member.id && m.isAdmin === false, m);
+
+  check('anonymous viewer is null', (await ok(VIEWER)).viewer === null);
+  check('forged token is anonymous, not an error', (await ok(VIEWER, {}, `${admin.token.split('.')[0]}.forged`)).viewer === null);
+  check('unsigned session id is anonymous', (await ok(VIEWER, {}, admin.token.split('.')[0])).viewer === null);
+  check('account removed from ALLOWED_EMAILS is anonymous', (await ok(VIEWER, {}, delisted.token)).viewer === null);
+
+  await expectRefused('signInWithGoogle with a garbage token', 'mutation($input: SignInWithGoogleInput!) { signInWithGoogle(input: $input) { token } }',
+    { input: { idToken: 'not-a-google-id-token' } }, undefined, ['UNAUTHENTICATED']);
+
+  // Sign out a throwaway session of the member's, then reuse it.
+  const { getAuth } = await import('../src/auth/better-auth.js');
+  const { env } = await import('../src/env.js');
+  const ctx = await getAuth().$context;
+  const extra = await ctx.internalAdapter.createSession(member.id);
+  const extraToken = decodeURIComponent((await serializeSignedCookie('', extra.token, env.authSecret)).replace('=', ''));
+  check('second session works', (await ok(VIEWER, {}, extraToken)).viewer?.id === member.id);
+  check('signOut revokes it', (await ok('mutation { signOut }', {}, extraToken)).signOut === true);
+  check('revoked token is anonymous', (await ok(VIEWER, {}, extraToken)).viewer === null);
+  check('other sessions survive signOut', (await ok(VIEWER, {}, member.token)).viewer?.id === member.id);
+  check('signOut without a session is false', (await ok('mutation { signOut }')).signOut === false);
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes('--setup')) return setup();
 
-  const key = process.env.TEST_PRIVATE_KEY as `0x${string}` | undefined;
-  if (!key) throw new Error('TEST_PRIVATE_KEY is not set. Run with --setup first.');
-  const account = privateKeyToAccount(key);
-  const address = account.address.toLowerCase();
+  const mongoose = (await import('mongoose')).default;
+  const { connectDatabase } = await import('../src/db/mongoose.js');
+  await connectDatabase();
 
-  if (process.argv.includes('--cleanup')) return cleanupFixtures(address);
-
-  console.log(`API ${API_URL}\nTest wallet ${address}`);
-
-  const admin = await signIn(account);
-  check('test wallet signs in', !!admin.token);
-  if (!admin.isAdmin) {
-    throw new Error(`${address} is not an admin on ${API_URL}. Run --setup and restart the local server.`);
+  if (process.argv.includes('--cleanup')) {
+    await mongoose.disconnect();
+    return cleanup();
   }
 
-  // A fresh wallet nobody has allow-listed: signed in, not admin, owns nothing.
-  const other = await signIn(privateKeyToAccount(generatePrivateKey()));
-  check('random wallet signs in as non-admin', !!other.token && !other.isAdmin);
+  console.log(`API ${API_URL}`);
+  let accounts: Record<string, TestAccount>;
+  try {
+    accounts = await createAccounts();
+  } catch (e) {
+    await mongoose.disconnect();
+    throw e;
+  }
 
-  // A replayed or foreign-domain message must not sign in.
-  const { siweNonce } = await ok<{ siweNonce: string }>('mutation { siweNonce }');
-  const foreign = createSiweMessage({ address: account.address, chainId: 1, domain: 'evil.example', nonce: siweNonce, uri: 'https://evil.example', version: '1' });
-  await expectRefused('sign-in from a foreign domain', 'mutation($input: SignInWithEthereumInput!) { signInWithEthereum(input: $input) { token } }',
-    { input: { message: foreign, signature: await account.signMessage({ message: foreign }) } }, undefined, ['UNAUTHENTICATED']);
-
-  await photoSuite(admin.token, other.token);
-  await loraSuite(address, admin.token, other.token);
+  try {
+    const admin = accounts[ADMIN_EMAIL];
+    if (!(await ok(VIEWER, {}, admin.token)).viewer?.isAdmin) {
+      throw new Error(`${ADMIN_EMAIL} is not an admin on ${API_URL}. Run --setup and restart the local server.`);
+    }
+    await authSuite(accounts);
+    await photoSuite(admin.token, accounts[MEMBER_EMAIL].token);
+    await loraSuite(admin.id, admin.token, accounts[MEMBER_EMAIL].token);
+  } finally {
+    await deleteAccounts().catch((e) => console.error('  ! test account cleanup failed (run --cleanup):', e));
+    await mongoose.disconnect();
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exitCode = failed ? 1 : 0;
