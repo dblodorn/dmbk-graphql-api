@@ -47,6 +47,19 @@ export const env = {
   cdnUrl: required('DO_SPACES_CDN_URL').replace(/\/+$/, ''),
 
   /**
+   * The DigitalOcean Space shared with dmbk and lora-trainer. Required at
+   * startup so a deploy without credentials fails now, not at the first upload.
+   * The endpoint may carry the bucket subdomain; `lib/spaces/client.ts` strips it.
+   */
+  spaces: {
+    endpoint: required('DO_SPACES_ENDPOINT'),
+    region: required('DO_SPACES_REGION'),
+    key: required('DO_SPACES_KEY'),
+    secret: required('DO_SPACES_SECRET'),
+    bucket: required('DO_SPACES_BUCKET'),
+  },
+
+  /**
    * Accounts (users, Google accounts, sessions) live in a database this API
    * owns, unlike the two above. better-auth creates its own collections and
    * indexes there.

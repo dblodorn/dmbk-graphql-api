@@ -64,6 +64,12 @@ PHOTOS_DB_NAME=dmbk-photos      # default
 LORA_DB_NAME=lora-trainer       # default
 # Public base for photo derivatives — same value as the dmbk app's DO_SPACES_CDN_URL
 DO_SPACES_CDN_URL=https://...
+# The DigitalOcean Space photos upload to (shared with dmbk; same values as its .env.local)
+DO_SPACES_ENDPOINT=https://sfo2.digitaloceanspaces.com
+DO_SPACES_REGION=sfo2
+DO_SPACES_KEY=...
+DO_SPACES_SECRET=...
+DO_SPACES_BUCKET=...
 # Accounts. Signs session tokens; required in production.
 BETTER_AUTH_SECRET=your-random-secret-here
 BETTER_AUTH_URL=http://localhost:4000   # https://graphql.dmbk.network in production
@@ -124,6 +130,9 @@ Fields that read or write one of those databases are prefixed with its name in c
 | `signOut` | session | Standard | Revoke the current session. |
 | `dmbkPhotosUpdatePhoto` | admin | Relay | Replace a photo's title and/or keywords. |
 | `dmbkPhotosSetPhotoHidden` | admin | Relay | Hide or unhide a photo. |
+| `dmbkPhotosReservePhotoUpload` | admin | Relay | Create a pending photo; returns a 15-minute presigned `uploadUrl` to PUT the original to (JPEG, PNG, WebP or AVIF, ≤ 50 MB). |
+| `dmbkPhotosFinalizePhoto` | admin | Relay | Check the uploaded original, generate thumb/grid/display WebPs, publish. Failures mark the photo `FAILED`. Returns `photo` and `photoEdge` (for `@prependEdge`). |
+| `dmbkPhotosDeletePhoto` | admin | Relay | Delete a photo, its keyword counts and its stored files. Returns `deletedPhotoId` (for `@deleteRecord`); `STORAGE_CLEANUP_FAILED` if the record went but the files didn't. |
 | `loraTrainerSetTrainingHidden` | owner | Relay | Hide or unhide one of your LoRA trainings. |
 | `loraTrainerSetImageHidden` | owner | Relay | Hide or unhide an image you generated. |
 

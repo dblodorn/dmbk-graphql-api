@@ -1,6 +1,9 @@
 import { builder } from './builder.js';
 import { signInWithGoogle, signOut, type Viewer } from '../auth/viewer.js';
 import { setPhotoHidden, updatePhoto } from '../lib/photos/repository.js';
+import { deletePhotoWithFiles, finalizePhoto, reservePhotoUpload } from '../lib/photos/upload.js';
+import { cursorFor } from '../lib/cursor.js';
+import type { PhotoDoc } from '../models/photos.js';
 import { setImageHidden, setTrainingHidden } from '../lib/lora/repository.js';
 import { PhotoRef } from './types/photo.js';
 import { GeneratedImageRef, LoraTrainingRef } from './types/lora.js';
@@ -97,6 +100,95 @@ builder.relayMutationField(
   {
     outputFields: (t) => ({
       photo: t.field({ type: PhotoRef, resolve: (payload) => payload.photo }),
+    }),
+  },
+);
+
+/** An edge outside any connection, so the admin list can `@prependEdge` a finalized photo. */
+const PhotoEdgeRef = builder.objectRef<PhotoDoc>('DmbkPhotosPhotoEdge').implement({
+  description: "A photo with its cursor in the `dmbkPhotos` ordering.",
+  fields: (t) => ({
+    cursor: t.string({ resolve: (photo) => cursorFor(photo) }),
+    node: t.field({ type: PhotoRef, resolve: (photo) => photo }),
+  }),
+});
+
+builder.relayMutationField(
+  'dmbkPhotosReservePhotoUpload',
+  {
+    inputFields: (t) => ({
+      contentType: t.string({ required: true, description: 'image/jpeg, image/png, image/webp or image/avif.' }),
+      byteSize: t.int({ required: true, description: 'Size of the original in bytes; at most 50 MB.' }),
+      title: t.string(),
+      keywords: t.stringList(),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: (_root, { input }) =>
+      reservePhotoUpload({
+        contentType: input.contentType,
+        byteSize: input.byteSize,
+        title: input.title,
+        keywords: input.keywords,
+      }),
+  },
+  {
+    outputFields: (t) => ({
+      photo: t.field({ type: PhotoRef, description: 'The new photo, `PENDING`.', resolve: (payload) => payload.photo }),
+      uploadUrl: t.string({
+        description:
+          'PUT the original here, with the same Content-Type, then call `dmbkPhotosFinalizePhoto`. Expires after 15 minutes.',
+        resolve: (payload) => payload.uploadUrl,
+      }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkPhotosFinalizePhoto',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: PhotoRef }),
+      title: t.string({ description: "Omit to keep the reservation's; null clears it." }),
+      keywords: t.stringList({ description: "Omit to keep the reservation's. Replaces the full set." }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => {
+      const photo = await finalizePhoto({ id: input.id.id, title: input.title, keywords: input.keywords });
+      return { photo };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      photo: t.field({ type: PhotoRef, resolve: (payload) => payload.photo }),
+      photoEdge: t.field({ type: PhotoEdgeRef, resolve: (payload) => payload.photo }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkPhotosDeletePhoto',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: PhotoRef }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => {
+      await deletePhotoWithFiles(input.id.id);
+      return { id: input.id.id };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      deletedPhotoId: t.globalID({
+        description: 'For Relay `@deleteRecord`.',
+        resolve: (payload) => ({ type: 'Photo', id: payload.id }),
+      }),
     }),
   },
 );

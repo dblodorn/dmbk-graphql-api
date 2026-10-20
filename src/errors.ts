@@ -3,6 +3,7 @@ import { InvalidInputError } from './lib/cursor.js';
 import { PhotoNotFoundError } from './lib/photos/repository.js';
 import { ForbiddenError, LoraNotFoundError } from './lib/lora/repository.js';
 import { AuthError } from './auth/viewer.js';
+import { StorageCleanupError } from './lib/photos/upload.js';
 
 /**
  * Domain errors a caller can act on, mapped to GraphQL error codes in one
@@ -15,6 +16,7 @@ const CODES: [new (...args: never[]) => Error, string][] = [
   [LoraNotFoundError, 'NOT_FOUND'],
   [ForbiddenError, 'FORBIDDEN'],
   [AuthError, 'UNAUTHENTICATED'],
+  [StorageCleanupError, 'STORAGE_CLEANUP_FAILED'],
 ];
 
 export function forbidden(message: string): GraphQLError {
