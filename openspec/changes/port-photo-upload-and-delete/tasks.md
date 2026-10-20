@@ -54,8 +54,8 @@
 
 - [x] 6.1 `README.md`: add the three mutations to the Mutations table and the five `DO_SPACES_*` variables to the env section. Verify by reading the rendered tables.
 - [x] 6.2 `CLAUDE.md` and `AGENTS.md`: add the Spaces variables to the env list, and note in Architecture that finalize processes one photo at a time and why, and that storage deletes are never by prefix. Verify that both files read correctly.
-- [ ] 6.3 `docs/plans/2026-10-08-migration-roadmap.md`: tick off Phase 2, record the droplet env date, and add the Space CORS check under Phase 4, step 2. Verify that the Phase 2 status in the table reads "Deployed" after task 7.1.
+- [x] 6.3 `docs/plans/2026-10-08-migration-roadmap.md`: tick off Phase 2, record the droplet env date, and add the Space CORS check under Phase 4, step 2. Verify that the Phase 2 status in the table reads "Deployed" after task 7.1.
 
 ## 7. Deploy
 
-- [ ] 7.1 Merge to `main`. After the deploy job passes, check on the droplet that `node -e "require('sharp')"` exits 0 in `/opt/graphql-api`, that `pm2 status` shows the process online, and that introspecting production lists the three new mutations.
+- [x] 7.1 Merge to `main`. After the deploy job passes, check on the droplet that `node -e "require('sharp')"` exits 0 in `/opt/graphql-api`, that `pm2 status` shows the process online, and that introspecting production lists the three new mutations.
