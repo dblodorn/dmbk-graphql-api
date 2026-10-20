@@ -8,7 +8,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 |---|---|---|
 | 1 | Relay reads, SIWE sign-in, curation mutations | Deployed 2026-10-20 at `graphql.dmbk.network` |
 | 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Planned — `openspec/changes/google-accounts/` |
-| 2 | Photo upload and delete | Built and tested 2026-10-20; deploy pending |
+| 2 | Photo upload and delete | Deployed 2026-10-20 |
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | Planned |
 
@@ -81,7 +81,7 @@ Progress (OpenSpec change `port-photo-upload-and-delete`):
 
 - [x] Spaces env vars set on the droplet, 2026-10-20 (backup `.env.bak-20261020-200306`). They're required at startup now.
 - [x] The three mutations, with `npm run test:mutations` passing against the real Space: reserve → PUT → finalize, EXIF orientation, failure recording, delete with counts and storage, and a forced storage-cleanup failure.
-- [ ] Deployed, with `require('sharp')` confirmed on the droplet.
+- [x] Deployed 2026-10-20 (#11). `require('sharp')` loads on the droplet (libvips 8.18.7), PM2 is online, and production lists the three mutations.
 - Differences from dmbk, on purpose:
   - Finalize runs one photo at a time and its derivatives one after another, to fit the 2 GB droplet.
   - A delete whose storage cleanup fails returns `STORAGE_CLEANUP_FAILED`, not a generic error.
