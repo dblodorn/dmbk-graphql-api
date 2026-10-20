@@ -61,14 +61,20 @@ function setup(): void {
   console.log('Restart `npm run dev` so the server picks them up.');
 }
 
+/**
+ * Run with the database connected. Reuses an open connection and leaves it
+ * open: better-auth holds the same client, and closing it mid-run would break
+ * the account cleanup that follows.
+ */
 async function withDb<T>(fn: (models: typeof import('../src/models/lora.js')) => Promise<T>): Promise<T> {
   const { connectDatabase } = await import('../src/db/mongoose.js');
   const mongoose = (await import('mongoose')).default;
-  await connectDatabase();
+  const owned = mongoose.connection.readyState !== mongoose.ConnectionStates.connected;
+  if (owned) await connectDatabase();
   try {
     return await fn(await import('../src/models/lora.js'));
   } finally {
-    await mongoose.disconnect();
+    if (owned) await mongoose.disconnect();
   }
 }
 

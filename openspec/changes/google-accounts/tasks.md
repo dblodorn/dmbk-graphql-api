@@ -5,7 +5,7 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
 ## 0. Setup (no code)
 
 - [ ] 0.1 In Google Cloud, create or reuse a web OAuth client. Add authorized JavaScript origins: `https://dmbk.io`, the other dmbk apexes, `https://arenatrainer.dmbk.io`, `http://localhost:3000`. Record `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
-- [ ] 0.2 In Atlas, grant the `graphql-api` user `readWrite` on `dmbk-accounts`.
+- [x] 0.2 In Atlas, grant the `graphql-api` user `readWrite` on `dmbk-accounts`.
 - [x] 0.3 Spike: on the installed better-auth version, confirm how to call Google ID-token sign-in from the server API and how to get the `bearer` session token back. Write the exact calls into design.md.
 
 ## 1. API PR — Google accounts, SIWE removed (this repo)
@@ -38,14 +38,14 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
 - [x] 1.8 `scripts/backfill-owner-id.ts`:
   - Report distinct `walletAddress` values with counts in both collections, and how many records are missing `ownerId`.
   - `--map wallet=userId` (repeatable). Refuse while any wallet is unmapped. Dry-run by default, `--apply` to write.
-- [ ] 1.9 `scripts/test-mutations.ts`:
+- [x] 1.9 `scripts/test-mutations.ts`:
   - Replace the SIWE sign-in with a `--setup` step that inserts a test user and session directly into the local `dmbk-accounts`, and adds the test email to the local `ALLOWED_EMAILS`/`ADMIN_EMAILS`.
   - Cover owner and non-owner checks with `ownerId` fixtures, plus revoked and anonymous tokens.
 - [x] 1.10 Docs:
   - README (mutations, env).
   - CLAUDE.md and AGENTS.md: the env and Auth sections, owner = `ownerId`, the `dmbk-accounts` row in the DB table, and the line saying this API doesn't touch the apps' user collections.
   - The roadmap's Phase 3–4 wording.
-- [ ] 1.11 `npm run typecheck`. Grep the repo (excluding `node_modules`, `openspec/`) for `siwe|SIWE|ALLOWED_ADDRESSES|jwt|viem`: no matches.
+- [x] 1.11 `npm run typecheck`. Grep the repo (excluding `node_modules`, `openspec/`) for `siwe|SIWE|ALLOWED_ADDRESSES|jwt|viem`: no matches.
 - [ ] 1.12 Set the new env vars on the droplet and remove the old ones. Then merge, deploy, and sign in with Google once to create the owner's user.
 - [ ] 1.13 Run the backfill, dry-run first and then `--apply`. Re-run the dry-run: it should report 0 records missing `ownerId`.
 
