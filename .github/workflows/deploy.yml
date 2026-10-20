@@ -3,9 +3,25 @@ name: Deploy to Droplet
 on:
   push:
     branches: [main]
+  pull_request:
 
 jobs:
+  # Runs on every PR and before every deploy. There is no other gate: a push
+  # to main that fails this never reaches the droplet.
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
   deploy:
+    needs: typecheck
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

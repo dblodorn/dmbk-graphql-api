@@ -12,7 +12,7 @@ npm run build      # also just tsc — tsconfig has noEmit: true, so nothing is 
 npm run test:mutations  # end-to-end mutation checks against a running local server (see below)
 ```
 
-- No unit tests and no linter; `npm run typecheck` (covers `src/` and `scripts/`) is the only automated check.
+- No unit tests and no linter; `npm run typecheck` (covers `src/` and `scripts/`) is the only automated check. It runs as a pre-commit hook (`.githooks/pre-commit`, wired up by the `prepare` script on `npm install`) and as the `typecheck` CI job on every PR and before every deploy.
 - `scripts/test-mutations.ts` exercises sign-in and every mutation against **live data** through a local server, restoring all it changes. Run `-- --setup` once: it writes `TEST_PRIVATE_KEY` to `.env` and adds that wallet to the *local* `ALLOWED_ADDRESSES` — never add it to production's. `-- --cleanup` removes LoRA fixtures left by a crashed run.
 - Code always runs through `tsx` (dev, start, and PM2 via `ecosystem.config.cjs`, as `node --import tsx`); there is no compiled output. Prod runs `npm install --omit=dev`, so `tsx` must stay in `dependencies`, not `devDependencies`.
 - `.env` is loaded by Node's `--env-file` everywhere (Node errors if the file is missing): in the npm scripts and in PM2's `interpreter_args`. PM2 has no `env_file` option of its own.
@@ -20,7 +20,7 @@ npm run test:mutations  # end-to-end mutation checks against a running local ser
 
 ## Deployment
 
-**Every push to `main` deploys to production.** `.github/workflows/deploy.yml` SSHes into a DigitalOcean droplet, hard-resets `/opt/graphql-api` to `origin/main`, runs `npm ci --omit=dev`, and `pm2 startOrRestart ecosystem.config.cjs --update-env` (starts it on a fresh box, re-reads the ecosystem file otherwise). The script runs under `set -euo pipefail` and fails the job if `localhost:4000` does not answer afterwards. It needs the `DROPLET_HOST` (public IP), `DROPLET_USER` and `DROPLET_SSH_KEY` repo secrets. There is no typecheck gate in CI — run `npm run typecheck` before pushing. Caddy terminates TLS for `graphql.dmbk.network` and proxies to port 4000.
+**Every push to `main` deploys to production.** `.github/workflows/deploy.yml` SSHes into a DigitalOcean droplet, hard-resets `/opt/graphql-api` to `origin/main`, runs `npm ci --omit=dev`, and `pm2 startOrRestart ecosystem.config.cjs --update-env` (starts it on a fresh box, re-reads the ecosystem file otherwise). The script runs under `set -euo pipefail` and fails the job if `localhost:4000` does not answer afterwards. It needs the `DROPLET_HOST` (public IP), `DROPLET_USER` and `DROPLET_SSH_KEY` repo secrets. The deploy job `needs` the `typecheck` job, so a push that fails typecheck never deploys. Caddy terminates TLS for `graphql.dmbk.network` and proxies to port 4000.
 
 ## What this is
 
