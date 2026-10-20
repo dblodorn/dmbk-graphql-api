@@ -1,15 +1,15 @@
-import mongoose from 'mongoose';
+import mongoose, { type Connection } from 'mongoose';
+import { env } from '../env.js';
 
-const MONGODB_URI: string = process.env.MONGODB_URI || '';
-const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'graphql-api';
+// The databases this API serves are owned by other apps, which create and drop
+// their own indexes and collections. Mongoose must never do either, or the two
+// will fight over index definitions on every deploy.
+mongoose.set('autoIndex', false);
+mongoose.set('autoCreate', false);
 
 export async function connectDatabase(): Promise<void> {
-  if (!MONGODB_URI) {
-    console.error('MONGODB_URI environment variable is required');
-    process.exit(1);
-  }
   try {
-    await mongoose.connect(MONGODB_URI, { dbName: MONGODB_DB_NAME });
+    await mongoose.connect(env.mongoUri);
     console.log('Connected to MongoDB');
   } catch (error) {
     console.error('MongoDB connection error:', error);
@@ -17,6 +17,14 @@ export async function connectDatabase(): Promise<void> {
   }
 }
 
-export function getDatabase(): typeof mongoose {
-  return mongoose;
+/**
+ * One connection pool, one handle per database. `useCache` returns the same
+ * handle on every call, so models registered on it are registered once.
+ */
+export function photosDb(): Connection {
+  return mongoose.connection.useDb(env.photosDbName, { useCache: true });
+}
+
+export function loraDb(): Connection {
+  return mongoose.connection.useDb(env.loraDbName, { useCache: true });
 }

@@ -4,7 +4,8 @@ module.exports = {
     script: 'src/index.ts',
     interpreter: 'npx',
     interpreter_args: 'tsx',
-    env: { NODE_ENV: 'development', PORT: '4000' },
+    // Production mode makes JWT_SECRET required and masks error details.
+    env: { NODE_ENV: 'production', PORT: '4000' },
     env_file: '.env',
     watch: false,
     max_restarts: 5,

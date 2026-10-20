@@ -1,37 +1,74 @@
 import { builder } from './builder.js';
-import mongoose from 'mongoose';
-import type { ContextType } from '../context.js';
-import { User } from './types/user.js';
+import { forbidden } from '../errors.js';
+import { listKeywords, listPhotos, PUBLIC_SCOPE } from '../lib/photos/repository.js';
+import { listPublicTrainings } from '../lib/lora/repository.js';
+import { SoundSnapshotModel, type SoundSnapshotDoc } from '../models/photos.js';
+import { toConnection } from './connection.js';
+import { KeywordRef, PhotoRef, PhotoStatusEnum, VisibilityEnum } from './types/photo.js';
+import { LoraTrainingRef } from './types/lora.js';
+import { SoundSnapshotRef } from './types/sound.js';
+import { ViewerRef } from './types/viewer.js';
 
 builder.queryType({});
 
-builder.queryField('_health', (t) =>
-  t.string({
-    resolve: () => 'ok',
-  }),
-);
+builder.queryField('_health', (t) => t.string({ resolve: () => 'ok' }));
 
-builder.queryField('me', (t) =>
+builder.queryField('viewer', (t) =>
   t.field({
-    type: User,
+    type: ViewerRef,
     nullable: true,
-    resolve: (_root: unknown, _args: unknown, context: ContextType) => {
-      return context.currentUser;
+    description: 'The signed-in wallet, or null when anonymous.',
+    resolve: (_root, _args, context) => context.viewer,
+  }),
+);
+
+builder.queryField('photos', (t) =>
+  t.connection({
+    type: PhotoRef,
+    description: 'Photos, newest first.',
+    args: {
+      keywords: t.arg.stringList({ description: 'Every keyword must be present. Normalized like stored keywords.' }),
+      visibility: t.arg({ type: VisibilityEnum, description: 'Admin only unless VISIBLE (the default).' }),
+      states: t.arg({ type: [PhotoStatusEnum], description: 'Admin only unless [READY] (the default).' }),
+    },
+    resolve: async (_root, args, context) => {
+      const visibility = args.visibility ?? 'visible';
+      const states = args.states?.length ? args.states : ['ready' as const];
+      const widened = visibility !== 'visible' || states.length !== 1 || states[0] !== 'ready';
+
+      // Refused rather than silently narrowed: narrowing would let a caller
+      // believe its filter worked when it did not.
+      if (widened && !context.viewer?.isAdmin) {
+        throw forbidden('Filtering by visibility or state requires an admin session.');
+      }
+
+      const scope = widened ? { visibility, states } : PUBLIC_SCOPE;
+      return toConnection(await listPhotos({ ...args, keywords: args.keywords, scope }));
     },
   }),
 );
 
-builder.queryField('users', (t) =>
+builder.queryField('keywords', (t) =>
   t.field({
-    type: [User],
-    resolve: async (_root: unknown, _args: unknown, context: ContextType) => {
-      const docs = await context.db.model('User').find().lean().exec() as any[];
-      return docs.map((u: any) => ({
-        id: u._id.toString(),
-        email: u.email,
-        name: u.name,
-        role: u.role || 'USER',
-      }));
-    },
+    type: [KeywordRef],
+    description: 'The photo keyword vocabulary, most used first.',
+    resolve: () => listKeywords(),
+  }),
+);
+
+builder.queryField('loraTrainings', (t) =>
+  t.connection({
+    type: LoraTrainingRef,
+    description: 'Completed, visible LoRA trainings, newest first.',
+    resolve: async (_root, args) => toConnection(await listPublicTrainings(args)),
+  }),
+);
+
+builder.queryField('soundPlaylists', (t) =>
+  t.field({
+    type: SoundSnapshotRef,
+    nullable: true,
+    description: 'The latest cached SoundCloud playlists snapshot.',
+    resolve: () => SoundSnapshotModel.findById('playlists').lean<SoundSnapshotDoc>().exec(),
   }),
 );
