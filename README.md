@@ -95,17 +95,19 @@ pm2 start ecosystem.config.cjs
 
 The API serves content owned by two other apps on the same Atlas cluster: the photo library, keyword vocabulary and SoundCloud snapshot from `dmbk-photos` ([dmbk](https://github.com/dblodorn/dmbk)), and LoRA trainings and generated images from `lora-trainer` ([lora-trainer](https://github.com/dblodorn/lora-trainer)).
 
+Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `loraTrainerSetImageHidden`). Auth and Relay fields (`viewer`, `node`, `siweNonce`, `signInWithEthereum`) have no prefix.
+
 ### Queries
 
 | Field | Auth | Description |
 |-------|------|-------------|
 | `_health` | none | Health check. Returns `"ok"`. |
 | `node` / `nodes` | none | Refetch any `Photo`, `LoraTraining` or `GeneratedImage` by global ID. |
-| `photos` | none (admin for `visibility`/`states`) | Ready, visible photos, newest first; filter by `keywords`. |
-| `keywords` | none | Photo keyword vocabulary with counts. |
-| `loraTrainings` | none | Completed, visible LoRA trainings; each has an `images` connection. |
-| `soundPlaylists` | none | Latest cached SoundCloud playlists. |
-| `viewer` | JWT | The signed-in wallet, with its own `loraTrainings` and `generatedImages` (including hidden). |
+| `dmbkPhotos` | none (admin for `visibility`/`states`) | Ready, visible photos, newest first; filter by `keywords`. |
+| `dmbkPhotosKeywords` | none | Photo keyword vocabulary with counts. |
+| `loraTrainerTrainings` | none | Completed, visible LoRA trainings; each has an `images` connection. |
+| `dmbkPhotosSoundPlaylists` | none | Latest cached SoundCloud playlists. |
+| `viewer` | JWT | The signed-in wallet, with its own `loraTrainerTrainings` and `loraTrainerImages` (including hidden). |
 
 ### Mutations
 
@@ -113,10 +115,10 @@ The API serves content owned by two other apps on the same Atlas cluster: the ph
 |-------|------|------|-------------|
 | `siweNonce` | none | Standard | Single-use nonce for a SIWE message. |
 | `signInWithEthereum` | none | Relay | Verify a signed SIWE message; returns a 7-day JWT. |
-| `updatePhoto` | admin | Relay | Replace a photo's title and/or keywords. |
-| `setPhotoHidden` | admin | Relay | Hide or unhide a photo. |
-| `setLoraTrainingHidden` | owner | Relay | Hide or unhide one of your LoRA trainings. |
-| `setGeneratedImageHidden` | owner | Relay | Hide or unhide an image you generated. |
+| `dmbkPhotosUpdatePhoto` | admin | Relay | Replace a photo's title and/or keywords. |
+| `dmbkPhotosSetPhotoHidden` | admin | Relay | Hide or unhide a photo. |
+| `loraTrainerSetTrainingHidden` | owner | Relay | Hide or unhide one of your LoRA trainings. |
+| `loraTrainerSetImageHidden` | owner | Relay | Hide or unhide an image you generated. |
 
 Admin = a wallet in `ALLOWED_ADDRESSES`. Owner = the wallet stored on the record.
 

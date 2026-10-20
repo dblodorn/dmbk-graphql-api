@@ -151,8 +151,8 @@ async function expectRefused(name: string, query: string, variables: Record<stri
 type Vocabulary = Map<string, { label: string; count: number }>;
 
 async function vocabulary(): Promise<Vocabulary> {
-  const data = await ok<{ keywords: { slug: string; label: string; count: number }[] }>('{ keywords { slug label count } }');
-  return new Map(data.keywords.map((k) => [k.slug, { label: k.label, count: k.count }]));
+  const data = await ok<{ dmbkPhotosKeywords: { slug: string; label: string; count: number }[] }>('{ dmbkPhotosKeywords { slug label count } }');
+  return new Map(data.dmbkPhotosKeywords.map((k) => [k.slug, { label: k.label, count: k.count }]));
 }
 
 /** Slugs whose label differs between two snapshots (present in both). */
@@ -182,10 +182,10 @@ const sameDelta = (actual: Record<string, number>, expected: Record<string, numb
 // Queries
 
 const PHOTO_FIELDS = 'id title keywords hidden status updatedAt';
-const UPDATE_PHOTO = `mutation($input: UpdatePhotoInput!) { updatePhoto(input: $input) { photo { ${PHOTO_FIELDS} } } }`;
-const SET_PHOTO_HIDDEN = `mutation($input: SetPhotoHiddenInput!) { setPhotoHidden(input: $input) { photo { ${PHOTO_FIELDS} } } }`;
-const SET_TRAINING_HIDDEN = `mutation($input: SetLoraTrainingHiddenInput!) { setLoraTrainingHidden(input: $input) { loraTraining { id hidden } } }`;
-const SET_IMAGE_HIDDEN = `mutation($input: SetGeneratedImageHiddenInput!) { setGeneratedImageHidden(input: $input) { generatedImage { id hidden } } }`;
+const UPDATE_PHOTO = `mutation($input: DmbkPhotosUpdatePhotoInput!) { dmbkPhotosUpdatePhoto(input: $input) { photo { ${PHOTO_FIELDS} } } }`;
+const SET_PHOTO_HIDDEN = `mutation($input: DmbkPhotosSetPhotoHiddenInput!) { dmbkPhotosSetPhotoHidden(input: $input) { photo { ${PHOTO_FIELDS} } } }`;
+const SET_TRAINING_HIDDEN = `mutation($input: LoraTrainerSetTrainingHiddenInput!) { loraTrainerSetTrainingHidden(input: $input) { loraTraining { id hidden } } }`;
+const SET_IMAGE_HIDDEN = `mutation($input: LoraTrainerSetImageHiddenInput!) { loraTrainerSetImageHidden(input: $input) { generatedImage { id hidden } } }`;
 const NODE = `query($id: ID!) { node(id: $id) { id ... on Photo { hidden } ... on LoraTraining { hidden } ... on GeneratedImage { hidden } } }`;
 
 // ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ async function photoSuite(adminToken: string, otherToken: string): Promise<void>
   // deletes its vocabulary entry, and unhiding recreates it with the slug as
   // its label, so the original display label would be lost.
   const start = await vocabulary();
-  const { photos } = await ok('{ photos(first: 100) { edges { node { id title keywords } } } }');
+  const { dmbkPhotos: photos } = await ok('{ dmbkPhotos(first: 100) { edges { node { id title keywords } } } }');
   const target = photos.edges
     .map((e: any) => e.node)
     .find((p: any) => p.keywords.length > 0 && p.keywords.every((k: string) => (start.get(k)?.count ?? 0) >= 2));
@@ -210,9 +210,9 @@ async function photoSuite(adminToken: string, otherToken: string): Promise<void>
   check('admin sees hidden/status', original.hidden === false && original.status === 'READY', original);
 
   // Auth: refused without admin, and nothing changes.
-  await expectRefused('updatePhoto anonymous', UPDATE_PHOTO, { input: { id: target.id, title: 'x' } }, undefined, ['UNAUTHENTICATED', 'FORBIDDEN']);
-  await expectRefused('updatePhoto non-admin', UPDATE_PHOTO, { input: { id: target.id, title: 'x' } }, otherToken, ['FORBIDDEN', 'UNAUTHENTICATED']);
-  await expectRefused('setPhotoHidden non-admin', SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: true } }, otherToken, ['FORBIDDEN', 'UNAUTHENTICATED']);
+  await expectRefused('dmbkPhotosUpdatePhoto anonymous', UPDATE_PHOTO, { input: { id: target.id, title: 'x' } }, undefined, ['UNAUTHENTICATED', 'FORBIDDEN']);
+  await expectRefused('dmbkPhotosUpdatePhoto non-admin', UPDATE_PHOTO, { input: { id: target.id, title: 'x' } }, otherToken, ['FORBIDDEN', 'UNAUTHENTICATED']);
+  await expectRefused('dmbkPhotosSetPhotoHidden non-admin', SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: true } }, otherToken, ['FORBIDDEN', 'UNAUTHENTICATED']);
 
   const suffix = crypto.randomBytes(3).toString('hex');
   const testLabel = `ZZ GraphQL Test ${suffix}`;
@@ -222,7 +222,7 @@ async function photoSuite(adminToken: string, otherToken: string): Promise<void>
     // Add a keyword (with messy spelling) and a title.
     const updated = (
       await ok(UPDATE_PHOTO, { input: { id: target.id, title: `  test title ${suffix}  `, keywords: [...original.keywords, `  ${testLabel} `, original.keywords[0]] } }, adminToken)
-    ).updatePhoto.photo;
+    ).dmbkPhotosUpdatePhoto.photo;
     check('keyword normalized and de-duplicated', JSON.stringify(updated.keywords) === JSON.stringify([...original.keywords, testSlug]), updated.keywords);
     check('title trimmed', updated.title === `test title ${suffix}`, updated.title);
     check('updatedAt advanced', updated.updatedAt > original.updatedAt);
@@ -235,13 +235,13 @@ async function photoSuite(adminToken: string, otherToken: string): Promise<void>
     await expectRefused('over-long title', UPDATE_PHOTO, { input: { id: target.id, title: 'x'.repeat(201) } }, adminToken, ['BAD_USER_INPUT']);
 
     // Restore.
-    const restored = (await ok(UPDATE_PHOTO, { input: { id: target.id, title: original.title, keywords: original.keywords } }, adminToken)).updatePhoto.photo;
+    const restored = (await ok(UPDATE_PHOTO, { input: { id: target.id, title: original.title, keywords: original.keywords } }, adminToken)).dmbkPhotosUpdatePhoto.photo;
     check('photo restored', restored.title === original.title && JSON.stringify(restored.keywords) === JSON.stringify(original.keywords), restored);
     const afterRestore = await vocabulary();
     check('vocabulary back to start (test keyword removed)', sameDelta(diff(start, afterRestore), {}), diff(start, afterRestore));
 
     // Hide: every keyword on the photo loses one count, and the public can't see it.
-    const hidden = (await ok(SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: true } }, adminToken)).setPhotoHidden.photo;
+    const hidden = (await ok(SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: true } }, adminToken)).dmbkPhotosSetPhotoHidden.photo;
     check('hidden set', hidden.hidden === true);
     const afterHide = await vocabulary();
     const expectHide = Object.fromEntries(original.keywords.map((k: string) => [k, -1]));
@@ -249,7 +249,7 @@ async function photoSuite(adminToken: string, otherToken: string): Promise<void>
     check('hidden photo is null for anonymous', (await ok(NODE, { id: target.id })).node === null);
     check('hidden photo visible to admin', (await ok(NODE, { id: target.id }, adminToken)).node?.hidden === true);
 
-    const again = (await ok(SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: true } }, adminToken)).setPhotoHidden.photo;
+    const again = (await ok(SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: true } }, adminToken)).dmbkPhotosSetPhotoHidden.photo;
     check('hiding twice is a no-op', again.updatedAt === hidden.updatedAt && sameDelta(diff(afterHide, await vocabulary()), {}));
 
     await ok(SET_PHOTO_HIDDEN, { input: { id: target.id, hidden: false } }, adminToken);
@@ -290,22 +290,22 @@ async function loraSuite(owner: string, ownerToken: string, otherToken: string):
     check('pending training null for anonymous', (await ok(NODE, { id: tId })).node === null);
     check('pending training visible to owner', (await ok(NODE, { id: tId }, ownerToken)).node?.id === tId);
 
-    await expectRefused('setLoraTrainingHidden anonymous', SET_TRAINING_HIDDEN, { input: { id: tId, hidden: true } }, undefined, ['UNAUTHENTICATED', 'FORBIDDEN']);
+    await expectRefused('loraTrainerSetTrainingHidden anonymous', SET_TRAINING_HIDDEN, { input: { id: tId, hidden: true } }, undefined, ['UNAUTHENTICATED', 'FORBIDDEN']);
     // Non-public record: a non-owner gets NOT_FOUND, so it can't be probed.
-    await expectRefused('setLoraTrainingHidden non-owner (non-public)', SET_TRAINING_HIDDEN, { input: { id: tId, hidden: true } }, otherToken, ['NOT_FOUND']);
+    await expectRefused('loraTrainerSetTrainingHidden non-owner (non-public)', SET_TRAINING_HIDDEN, { input: { id: tId, hidden: true } }, otherToken, ['NOT_FOUND']);
 
-    const t1 = (await ok(SET_TRAINING_HIDDEN, { input: { id: tId, hidden: true } }, ownerToken)).setLoraTrainingHidden.loraTraining;
+    const t1 = (await ok(SET_TRAINING_HIDDEN, { input: { id: tId, hidden: true } }, ownerToken)).loraTrainerSetTrainingHidden.loraTraining;
     check('owner hides training', t1.hidden === true);
-    const t2 = (await ok(SET_TRAINING_HIDDEN, { input: { id: tId, hidden: false } }, ownerToken)).setLoraTrainingHidden.loraTraining;
+    const t2 = (await ok(SET_TRAINING_HIDDEN, { input: { id: tId, hidden: false } }, ownerToken)).loraTrainerSetTrainingHidden.loraTraining;
     check('owner unhides training', t2.hidden === false);
 
-    await expectRefused('setGeneratedImageHidden non-owner (hidden)', SET_IMAGE_HIDDEN, { input: { id: iId, hidden: false } }, otherToken, ['NOT_FOUND']);
-    const i1 = (await ok(SET_IMAGE_HIDDEN, { input: { id: iId, hidden: false } }, ownerToken)).setGeneratedImageHidden.generatedImage;
+    await expectRefused('loraTrainerSetImageHidden non-owner (hidden)', SET_IMAGE_HIDDEN, { input: { id: iId, hidden: false } }, otherToken, ['NOT_FOUND']);
+    const i1 = (await ok(SET_IMAGE_HIDDEN, { input: { id: iId, hidden: false } }, ownerToken)).loraTrainerSetImageHidden.generatedImage;
     check('owner unhides image', i1.hidden === false);
     check('visible image public to anonymous', (await ok(NODE, { id: iId })).node?.id === iId);
     // Now public: a non-owner gets FORBIDDEN rather than NOT_FOUND.
-    await expectRefused('setGeneratedImageHidden non-owner (public)', SET_IMAGE_HIDDEN, { input: { id: iId, hidden: true } }, otherToken, ['FORBIDDEN']);
-    const i2 = (await ok(SET_IMAGE_HIDDEN, { input: { id: iId, hidden: true } }, ownerToken)).setGeneratedImageHidden.generatedImage;
+    await expectRefused('loraTrainerSetImageHidden non-owner (public)', SET_IMAGE_HIDDEN, { input: { id: iId, hidden: true } }, otherToken, ['FORBIDDEN']);
+    const i2 = (await ok(SET_IMAGE_HIDDEN, { input: { id: iId, hidden: true } }, ownerToken)).loraTrainerSetImageHidden.generatedImage;
     check('owner re-hides image', i2.hidden === true);
     check('hidden image null for anonymous', (await ok(NODE, { id: iId })).node === null);
   } finally {

@@ -23,8 +23,8 @@ async function main() {
     context: ({ request }) => createContext(getViewerFromRequest(request)),
     graphiql: {
       title: 'dmbk GraphQL API',
-      defaultQuery: `query Photos {
-  photos(first: 5) {
+      defaultQuery: `query DmbkPhotos {
+  dmbkPhotos(first: 5) {
     edges { node { id title thumbUrl } }
     pageInfo { hasNextPage endCursor }
   }

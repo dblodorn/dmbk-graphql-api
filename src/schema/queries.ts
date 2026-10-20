@@ -22,7 +22,7 @@ builder.queryField('viewer', (t) =>
   }),
 );
 
-builder.queryField('photos', (t) =>
+builder.queryField('dmbkPhotos', (t) =>
   t.connection({
     type: PhotoRef,
     description: 'Photos, newest first.',
@@ -48,7 +48,7 @@ builder.queryField('photos', (t) =>
   }),
 );
 
-builder.queryField('keywords', (t) =>
+builder.queryField('dmbkPhotosKeywords', (t) =>
   t.field({
     type: [KeywordRef],
     description: 'The photo keyword vocabulary, most used first.',
@@ -56,7 +56,7 @@ builder.queryField('keywords', (t) =>
   }),
 );
 
-builder.queryField('loraTrainings', (t) =>
+builder.queryField('loraTrainerTrainings', (t) =>
   t.connection({
     type: LoraTrainingRef,
     description: 'Completed, visible LoRA trainings, newest first.',
@@ -64,7 +64,7 @@ builder.queryField('loraTrainings', (t) =>
   }),
 );
 
-builder.queryField('soundPlaylists', (t) =>
+builder.queryField('dmbkPhotosSoundPlaylists', (t) =>
   t.field({
     type: SoundSnapshotRef,
     nullable: true,

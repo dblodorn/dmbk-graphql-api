@@ -10,14 +10,14 @@ export const ViewerRef = builder.objectRef<Viewer>('Viewer').implement({
   fields: (t) => ({
     address: t.exposeString('address', { description: 'Lowercased.' }),
     isAdmin: t.exposeBoolean('isAdmin', { description: 'May curate the photo library.' }),
-    loraTrainings: t.connection({
+    loraTrainerTrainings: t.connection({
       type: LoraTrainingRef,
       description: "This wallet's own trainings, at any status.",
       args: { visibility: t.arg({ type: VisibilityEnum, defaultValue: 'any' }) },
       resolve: async (viewer, args) =>
         toConnection(await listOwnTrainings(viewer, args.visibility ?? 'any', args)),
     }),
-    generatedImages: t.connection({
+    loraTrainerImages: t.connection({
       type: GeneratedImageRef,
       description: 'Images this wallet generated.',
       args: { visibility: t.arg({ type: VisibilityEnum, defaultValue: 'any' }) },
