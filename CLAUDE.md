@@ -9,9 +9,11 @@ npm run dev        # tsx watch --env-file=.env src/index.ts — GraphiQL at http
 npm run start      # same, no watch
 npm run typecheck  # tsc --noEmit
 npm run build      # also just tsc — tsconfig has noEmit: true, so nothing is emitted
+npm run test:mutations  # end-to-end mutation checks against a running local server (see below)
 ```
 
-- No test suite and no linter; `npm run typecheck` is the only automated check.
+- No unit tests and no linter; `npm run typecheck` (covers `src/` and `scripts/`) is the only automated check.
+- `scripts/test-mutations.ts` exercises sign-in and every mutation against **live data** through a local server, restoring all it changes. Run `-- --setup` once: it writes `TEST_PRIVATE_KEY` to `.env` and adds that wallet to the *local* `ALLOWED_ADDRESSES` — never add it to production's. `-- --cleanup` removes LoRA fixtures left by a crashed run.
 - Code always runs through `tsx` (dev, start, and PM2 via `ecosystem.config.cjs`, as `node --import tsx`); there is no compiled output. Prod runs `npm install --omit=dev`, so `tsx` must stay in `dependencies`, not `devDependencies`.
 - `.env` is loaded by Node's `--env-file` everywhere (Node errors if the file is missing): in the npm scripts and in PM2's `interpreter_args`. PM2 has no `env_file` option of its own.
 - Env (`src/env.ts`, validated at startup): `MONGODB_URI`, `DO_SPACES_CDN_URL` (required); `JWT_SECRET` (required in production); `ALLOWED_ADDRESSES` (comma-separated admin wallets); `SIWE_DOMAINS` (comma-separated hosts users sign in *from*, e.g. `dmbk.io,*.dmbk.io,localhost:3000`; also the CORS allowlist; `*.` matches subdomains, not the apex — `lib/hosts.ts`); `PHOTOS_DB_NAME` / `LORA_DB_NAME` (default `dmbk-photos` / `lora-trainer`); `PORT`; `NODE_ENV`.

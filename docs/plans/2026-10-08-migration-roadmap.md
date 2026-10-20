@@ -6,7 +6,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Relay reads, SIWE sign-in, curation mutations | Built, not yet run against live data or deployed |
+| 1 | Relay reads, SIWE sign-in, curation mutations | Deployed 2026-10-20 at `graphql.dmbk.network` |
 | 2 | Photo upload and delete | Planned |
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | Planned |
@@ -26,7 +26,8 @@ Remaining before the first deploy:
   - `node(id:)` round-trips for `Photo`, `LoraTraining` and `GeneratedImage`.
 - [x] Database access: the API uses its own Atlas user, `graphql-api`, with `readWrite` on `dmbk-photos` and `lora-trainer` only, scoped to the `dmbk-world` cluster. The apps' users (`dmbk-photos-app`, `lora-trainer-app2`) can each reach only their own database.
   - An older user, `dmbk-graphql-api`, has `readWriteAnyDatabase` and isn't used by this code. Delete it once nothing else depends on it.
-- [ ] Not yet tested: the mutations against live data. This needs a signature from an admin wallet. Signed in as the admin wallet, check that `updatePhoto` changes keyword counts the same way dmbk does (compare the `keywords` collection before and after), and that hide/unhide round-trips.
+- [x] Mutations tested against live data (2026-10-20) with `npm run test:mutations`: SIWE sign-in and refusals, `updatePhoto` keyword normalization and counts, hide/unhide counts and visibility, and LoRA owner/non-owner hide on temporary fixtures. Everything is restored afterwards.
+  - Shared with dmbk, not fixed: hiding the last photo that carries a keyword deletes that keyword's entry, and unhiding recreates it with the slug as its label. The display label is lost (`Baja` becomes `baja`). Fix it in both repos or neither.
 - [x] Set the env vars on the droplet before merging (done 2026-10-20, production `JWT_SECRET` generated on the droplet): `MONGODB_URI` (the `graphql-api` user), `DO_SPACES_CDN_URL`, `ALLOWED_ADDRESSES`, `SIWE_DOMAINS`, `JWT_SECRET` (generate a separate one for production). Remove `MONGODB_DB_NAME`. The server exits at startup without `MONGODB_URI`, `DO_SPACES_CDN_URL` or (in production) `JWT_SECRET`.
 - [x] Add lora-trainer's domain to `SIWE_DOMAINS`: it's `arenatrainer.dmbk.io`, covered by `*.dmbk.io`. Local `.env` now has `dmbk.io,*.dmbk.io,dain.kim,*.dain.kim,db13.us,localhost:3000`; the droplet's `.env` needs the same.
 - [x] Fix `NODE_ENV` in `ecosystem.config.cjs`. It set `development`, which made `JWT_SECRET` optional (falling back to a known dev secret) and returned error details to clients. It now sets `production`, so **`JWT_SECRET` must be in the droplet's `.env` before this deploys**, or the server exits on startup.
