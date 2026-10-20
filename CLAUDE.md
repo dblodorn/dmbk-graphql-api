@@ -18,7 +18,7 @@ npm run build      # also just tsc — tsconfig has noEmit: true, so nothing is 
 
 ## Deployment
 
-**Every push to `main` deploys to production.** `.github/workflows/deploy.yml` SSHes into a DigitalOcean droplet, `git pull`s `/opt/graphql-api`, runs `npm install --omit=dev`, and `pm2 startOrRestart ecosystem.config.cjs --update-env` (starts it on a fresh box, re-reads the ecosystem file otherwise). It needs the `DROPLET_HOST` (public IP), `DROPLET_USER` and `DROPLET_SSH_KEY` repo secrets. There is no typecheck gate in CI — run `npm run typecheck` before pushing. Caddy terminates TLS for `graphql.dmbk.network` and proxies to port 4000.
+**Every push to `main` deploys to production.** `.github/workflows/deploy.yml` SSHes into a DigitalOcean droplet, hard-resets `/opt/graphql-api` to `origin/main`, runs `npm ci --omit=dev`, and `pm2 startOrRestart ecosystem.config.cjs --update-env` (starts it on a fresh box, re-reads the ecosystem file otherwise). The script runs under `set -euo pipefail` and fails the job if `localhost:4000` does not answer afterwards. It needs the `DROPLET_HOST` (public IP), `DROPLET_USER` and `DROPLET_SSH_KEY` repo secrets. There is no typecheck gate in CI — run `npm run typecheck` before pushing. Caddy terminates TLS for `graphql.dmbk.network` and proxies to port 4000.
 
 ## What this is
 

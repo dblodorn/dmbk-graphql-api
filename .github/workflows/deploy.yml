@@ -17,10 +17,27 @@ jobs:
           username: ${{ secrets.DROPLET_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
+            # Stop at the first failing command, so a failed step fails the job
+            # instead of restarting the old code and reporting success.
+            set -euo pipefail
             cd /opt/graphql-api
-            git pull origin main
-            npm install --omit=dev
+            # The droplet is a deploy target only: match origin/main exactly,
+            # even over stray untracked files. .env is gitignored and untouched.
+            git fetch origin main
+            git reset --hard origin/main
+            git log --oneline -1
+            # Installs exactly the lockfile, without rewriting it.
+            npm ci --omit=dev
             # Starts the app on first deploy; afterwards restarts it with the
             # ecosystem file re-read, so config changes take effect.
             pm2 startOrRestart ecosystem.config.cjs --update-env
             pm2 save
+            # Fail the job if the server isn't answering after the restart.
+            for i in $(seq 1 15); do
+              curl -sf -m 3 localhost:4000/graphql -H 'content-type: application/json' \
+                -d '{"query":"{ __typename }"}' && exit 0
+              sleep 2
+            done
+            echo "graphql-api did not come up; recent logs:"
+            pm2 logs graphql-api --lines 30 --nostream
+            exit 1
