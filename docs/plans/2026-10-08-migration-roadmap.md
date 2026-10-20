@@ -8,7 +8,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 |---|---|---|
 | 1 | Relay reads, SIWE sign-in, curation mutations | Deployed 2026-10-20 at `graphql.dmbk.network` |
 | 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Planned — `openspec/changes/google-accounts/` |
-| 2 | Photo upload and delete | Planned |
+| 2 | Photo upload and delete | Built and tested 2026-10-20; deploy pending |
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | Planned |
 
@@ -77,6 +77,16 @@ Keep identical to dmbk while both write: keyword normalization, `isCounted`, lab
 
 dmbk's maintenance scripts (`recount-keywords`, `cleanup-pending-photos`, `backfill-grid-derivative`) stay in dmbk for now.
 
+Progress (OpenSpec change `port-photo-upload-and-delete`):
+
+- [x] Spaces env vars set on the droplet, 2026-10-20 (backup `.env.bak-20261020-200306`). They're required at startup now.
+- [x] The three mutations, with `npm run test:mutations` passing against the real Space: reserve → PUT → finalize, EXIF orientation, failure recording, delete with counts and storage, and a forced storage-cleanup failure.
+- [ ] Deployed, with `require('sharp')` confirmed on the droplet.
+- Differences from dmbk, on purpose:
+  - Finalize runs one photo at a time and its derivatives one after another, to fit the 2 GB droplet.
+  - A delete whose storage cleanup fails returns `STORAGE_CLEANUP_FAILED`, not a generic error.
+  - AVIF actually finalizes. sharp reports AVIF as `heif`, and dmbk's format map lacks it, so **dmbk rejects AVIF at finalize** even though it accepts it at reserve. Fix that in dmbk too (map `heif` with `av1` compression to `image/avif`).
+
 ---
 
 ## Phase 3 — LoRA training and image generation
@@ -108,6 +118,7 @@ Do this per capability, in this order:
    - Point it at this API with Relay, and add the Relay compiler to dmbk.
    - Admin sign-in has already moved to this API's Google sessions in Phase 1.5.
 2. **dmbk admin writes.** Edit, hide, upload (after Phase 2) and delete move from tRPC (`features/photos.ts`) to this API's mutations.
+   - Before switching upload over, confirm the Space's CORS rules allow `PUT` from every admin origin (`dmbk.io`, previews, `localhost:3000`). The browser PUTs straight to the `uploadUrl`.
 3. **Delete dmbk's temporary API.** Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. (better-auth and the SIWE wiring are already gone, in Phase 1.5.)
 4. **dmbk public pages.** Today the server components import `src/lib/photos/repository.ts` directly. Decide whether they read this API too, or keep the direct Mongo read as a deliberately read-only path. dmbk's own design doc leaves this open.
 5. **lora-trainer.** Move reads, then hide/unhide, then (after Phase 3) training and generation. Then delete its tRPC routers and its direct Mongo access.

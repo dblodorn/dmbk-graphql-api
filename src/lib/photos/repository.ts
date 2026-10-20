@@ -1,4 +1,11 @@
-import { PhotoModel, KeywordModel, type PhotoDoc, type PhotoStatus, type KeywordDoc } from '../../models/photos.js';
+import {
+  PhotoModel,
+  KeywordModel,
+  PHOTO_SCHEMA_VERSION,
+  type PhotoDoc,
+  type PhotoStatus,
+  type KeywordDoc,
+} from '../../models/photos.js';
 import { InvalidInputError, paginate, type Page, type PageArgs } from '../cursor.js';
 import { applyKeywordDelta, normalizeKeywords, registerKeywordLabels } from './keywords.js';
 
@@ -165,4 +172,148 @@ export async function setPhotoHidden(id: string, hidden: boolean): Promise<Photo
   }
 
   return requirePhoto(id);
+}
+
+// ---------------------------------------------------------------------------
+// Upload lifecycle — ported from dmbk's `createPendingPhoto`, `promoteToReady`,
+// `markPhotoFailed`, and `deletePhoto`. Both apps finalize and delete each
+// other's photos, so the document shape and count rules must stay identical.
+
+/** The record behind an upload reservation. Invisible to the public; uncounted. */
+export async function createPendingPhoto(input: {
+  id: string;
+  originalKey: string;
+  contentType: string;
+  title?: string | null;
+  keywords?: readonly string[] | null;
+}): Promise<PhotoDoc> {
+  const { slugs, labels } = normalizeKeywords(input.keywords ?? []);
+  const now = new Date().toISOString();
+
+  const doc: PhotoDoc = {
+    _id: input.id,
+    title: normalizeTitle(input.title),
+    keywords: slugs,
+    status: 'pending',
+    hidden: false,
+    originalKey: input.originalKey,
+    displayKey: null,
+    gridKey: null,
+    thumbKey: null,
+    width: null,
+    height: null,
+    byteSize: null,
+    contentType: input.contentType,
+    failureReason: null,
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: PHOTO_SCHEMA_VERSION,
+  };
+
+  await PhotoModel.create(doc);
+
+  // Capture the human spelling now: by the time this photo goes `ready` only
+  // the slugs remain on the document, and the label would be lost.
+  await registerKeywordLabels(labels);
+
+  return doc;
+}
+
+/** Any status, any visibility. Null for an unknown or malformed id. */
+export async function getPhotoDoc(id: string): Promise<PhotoDoc | null> {
+  if (!isValidPhotoId(id)) return null;
+  return PhotoModel.findById(id).lean<PhotoDoc>().exec();
+}
+
+/**
+ * Record the derivatives and promote to `ready`. Title and keywords supplied
+ * here replace the reservation's; omitted ones keep it.
+ */
+export async function promoteToReady(input: {
+  id: string;
+  displayKey: string;
+  gridKey: string;
+  thumbKey: string;
+  width: number;
+  height: number;
+  byteSize: number;
+  contentType: string;
+  title?: string | null;
+  keywords?: readonly string[] | null;
+  replaceTitle: boolean;
+  replaceKeywords: boolean;
+}): Promise<PhotoDoc> {
+  const existing = await requirePhoto(input.id);
+
+  const title = input.replaceTitle ? normalizeTitle(input.title) : existing.title;
+
+  let keywords = existing.keywords;
+  let labels: Map<string, string> | undefined;
+  if (input.replaceKeywords) {
+    const normalized = normalizeKeywords(input.keywords ?? []);
+    keywords = normalized.slugs;
+    labels = normalized.labels;
+  }
+
+  const updated: PhotoDoc = {
+    ...existing,
+    title,
+    keywords,
+    status: 'ready',
+    displayKey: input.displayKey,
+    gridKey: input.gridKey,
+    thumbKey: input.thumbKey,
+    width: input.width,
+    height: input.height,
+    byteSize: input.byteSize,
+    contentType: input.contentType,
+    failureReason: null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await PhotoModel.replaceOne({ _id: input.id }, updated);
+
+  // Invisible until now, so every keyword it carries is new to the counts —
+  // unless it was hidden before finalizing, in which case it stays uncounted.
+  if (isCounted(updated)) await applyKeywordDelta([], keywords, labels);
+
+  return updated;
+}
+
+/** Mark a photo `failed`. A photo leaving public view stops being counted. */
+export async function markPhotoFailed(id: string, reason: string): Promise<void> {
+  const existing = await getPhotoDoc(id);
+  if (!existing) return;
+
+  await PhotoModel.updateOne(
+    { _id: id },
+    { $set: { status: 'failed', failureReason: reason, updatedAt: new Date().toISOString() } },
+  );
+
+  if (isCounted(existing)) await applyKeywordDelta(existing.keywords, []);
+}
+
+/**
+ * Remove the record and its keyword counts, returning the storage keys it
+ * held. The caller deletes those objects — record first, so a storage failure
+ * leaves orphaned bytes rather than a record pointing at nothing.
+ */
+export async function deletePhoto(id: string): Promise<{
+  originalKey: string;
+  displayKey: string | null;
+  gridKey: string | null;
+  thumbKey: string | null;
+}> {
+  const existing = await requirePhoto(id);
+
+  await PhotoModel.deleteOne({ _id: id });
+
+  if (isCounted(existing)) await applyKeywordDelta(existing.keywords, []);
+
+  return {
+    originalKey: existing.originalKey,
+    displayKey: existing.displayKey,
+    gridKey: existing.gridKey,
+    thumbKey: existing.thumbKey,
+  };
 }
