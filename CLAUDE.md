@@ -12,13 +12,13 @@ npm run build      # also just tsc — tsconfig has noEmit: true, so nothing is 
 ```
 
 - No test suite and no linter; `npm run typecheck` is the only automated check.
-- Code always runs through `tsx` (dev, start, and PM2 via `ecosystem.config.cjs`); there is no compiled output. Prod runs `npm install --omit=dev` and then `npx tsx`, so `tsx` is a devDependency prod needs at runtime.
-- `dev`/`start` load `.env` via `--env-file` (Node errors if the file is missing); PM2 loads it via `env_file`.
+- Code always runs through `tsx` (dev, start, and PM2 via `ecosystem.config.cjs`, as `node --import tsx`); there is no compiled output. Prod runs `npm install --omit=dev`, so `tsx` must stay in `dependencies`, not `devDependencies`.
+- `.env` is loaded by Node's `--env-file` everywhere (Node errors if the file is missing): in the npm scripts and in PM2's `interpreter_args`. PM2 has no `env_file` option of its own.
 - Env (`src/env.ts`, validated at startup): `MONGODB_URI`, `DO_SPACES_CDN_URL` (required); `JWT_SECRET` (required in production); `ALLOWED_ADDRESSES` (comma-separated admin wallets); `SIWE_DOMAINS` (comma-separated hosts users sign in *from*, e.g. `dmbk.io,*.dmbk.io,localhost:3000`; also the CORS allowlist; `*.` matches subdomains, not the apex — `lib/hosts.ts`); `PHOTOS_DB_NAME` / `LORA_DB_NAME` (default `dmbk-photos` / `lora-trainer`); `PORT`; `NODE_ENV`.
 
 ## Deployment
 
-**Every push to `main` deploys to production.** `.github/workflows/deploy.yml` SSHes into a DigitalOcean droplet, `git pull`s `/opt/graphql-api`, runs `npm install --omit=dev`, and `pm2 restart graphql-api`. There is no typecheck gate in CI — run `npm run typecheck` before pushing. Caddy terminates TLS for `graphql.dmbk.network` and proxies to port 4000.
+**Every push to `main` deploys to production.** `.github/workflows/deploy.yml` SSHes into a DigitalOcean droplet, `git pull`s `/opt/graphql-api`, runs `npm install --omit=dev`, and `pm2 startOrRestart ecosystem.config.cjs --update-env` (starts it on a fresh box, re-reads the ecosystem file otherwise). It needs the `DROPLET_HOST` (public IP), `DROPLET_USER` and `DROPLET_SSH_KEY` repo secrets. There is no typecheck gate in CI — run `npm run typecheck` before pushing. Caddy terminates TLS for `graphql.dmbk.network` and proxies to port 4000.
 
 ## What this is
 

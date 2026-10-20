@@ -20,4 +20,7 @@ jobs:
             cd /opt/graphql-api
             git pull origin main
             npm install --omit=dev
-            pm2 restart graphql-api
+            # Starts the app on first deploy; afterwards restarts it with the
+            # ecosystem file re-read, so config changes take effect.
+            pm2 startOrRestart ecosystem.config.cjs --update-env
+            pm2 save
