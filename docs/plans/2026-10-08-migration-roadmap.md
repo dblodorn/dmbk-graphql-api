@@ -134,8 +134,8 @@ Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/li
 - [x] Atlas: `readWrite` on `dmbk-sound` for `graphql-api` and `dmbk-photos-app` (2026-10-21).
 - [x] `npm run move:sound-snapshots -- --apply` copies the snapshot (2026-10-21).
 - [x] dmbk writes and reads the snapshot in `dmbk-sound` (dmbk #36, 2026-10-21), and a production build advances its `fetchedAt` there.
-- [ ] This API reads `dmbk-sound` (deployed).
-- [ ] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots`, and a later check confirms no old dmbk build has recreated it.
+- [x] This API reads `dmbk-sound` (deployed 2026-10-21, #15).
+- [ ] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots` (dropped 2026-10-21), and a later check confirms no old dmbk build has recreated it.
 
 ---
 
