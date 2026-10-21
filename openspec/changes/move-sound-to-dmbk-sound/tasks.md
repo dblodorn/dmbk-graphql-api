@@ -3,6 +3,7 @@
 ## 1. Access and current state
 
 - [ ] 1.1 In Atlas (cluster `dmbk-world`), grant `readWrite` on `dmbk-sound` to `dmbk-photos-app` and `graphql-api`. Verify both users' roles list `dmbk-sound` in the Atlas UI or `atlas dbusers describe`.
+  - `graphql-api`: done 2026-10-21 (roles `dmbk-photos`, `lora-trainer`, `dmbk-accounts`, `dmbk-sound`; scope `dmbk-world` kept). `dmbk-photos-app`: pending.
 - [x] 1.2 Record the current state: `dmbk-photos.sound_snapshots` document count (expect 1, `_id: "playlists"`), its `fetchedAt` and `schemaVersion`, and confirm `dmbk-sound` doesn't exist yet. Note the values in the PR description.
   - Recorded 2026-10-21: 1 document, `_id: "playlists"`, `fetchedAt: 2026-10-20T23:59:44.436Z`, `schemaVersion: 1`, 14 playlists. `graphql-api` is refused `listCollections` on `dmbk-sound` (task 1.1 is needed).
 
@@ -30,7 +31,8 @@
 
 ## 6. Rollout (in order)
 
-- [ ] 6.1 Run `npm run move:sound-snapshots` (report), then `-- --apply` against production. Verify the `dmbk-sound.sound_snapshots` document is identical to the one recorded in 1.2.
+- [x] 6.1 Run `npm run move:sound-snapshots` (report), then `-- --apply` against production. Verify the `dmbk-sound.sound_snapshots` document is identical to the one recorded in 1.2.
+  - Done 2026-10-21. A dmbk build had refreshed the source since 1.2, so the copied document is `fetchedAt 2026-10-21T16:31:37.260Z`, `schemaVersion 1`, 14 playlists, deep-equal to the source. A re-run reports nothing to do.
 - [ ] 6.2 Merge and deploy the dmbk PR, then trigger a production build. Verify `fetchedAt` in `dmbk-sound` advanced past the 1.2 value and `/sound` lists Recordings.
 - [ ] 6.3 Merge this repo's PR to `main` (auto-deploys). Verify on `https://graphql.dmbk.network/graphql` that `{ dmbkSoundPlaylists { fetchedAt } }` returns the value from 6.2 and `dmbkPhotosSoundPlaylists` fails validation.
 - [ ] 6.4 Re-run `-- --apply` (catches a build that wrote to the old location between 6.1 and 6.2, and must report "target is newer, nothing to do"), then `-- --drop-source`. Verify `dmbk-photos` lists no `sound_snapshots` collection.
