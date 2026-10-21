@@ -28,3 +28,7 @@ export function photosDb(): Connection {
 export function loraDb(): Connection {
   return mongoose.connection.useDb(env.loraDbName, { useCache: true });
 }
+
+export function soundDb(): Connection {
+  return mongoose.connection.useDb(env.soundDbName, { useCache: true });
+}
