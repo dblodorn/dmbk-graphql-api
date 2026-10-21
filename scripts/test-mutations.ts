@@ -33,9 +33,14 @@
  *   `UPLOAD_KEYWORD`, so `--cleanup` can find leftovers. The one finalized
  *   photo is public for the few seconds between finalize and delete.
  * - Auth: anonymous, non-admin, de-listed and signed-out callers must be refused.
+ * - Are.na: this script serves a stub Are.na on ARENA_STUB_PORT (4099). Run the
+ *   server against it to include the suite — `ARENA_API_URL=http://localhost:4099
+ *   npm run dev` — otherwise it is skipped. The test accounts' `arena_profiles`
+ *   are deleted with them.
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import { serializeSignedCookie } from 'better-call';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000/graphql';
@@ -133,6 +138,8 @@ async function deleteAccounts(): Promise<number> {
     const found = await ctx.internalAdapter.findUserByEmail(email);
     if (!found) continue;
     await ctx.internalAdapter.deleteUserSessions(found.user.id);
+    const { clearArenaProfile } = await import('../src/lib/arena/profile.js');
+    await clearArenaProfile(found.user.id);
     await ctx.internalAdapter.deleteUser(found.user.id);
     deleted++;
   }
@@ -550,6 +557,101 @@ async function authSuite(accounts: Record<string, TestAccount>): Promise<void> {
   check('signOut without a session is false', (await ok('mutation { signOut }')).signOut === false);
 }
 
+// ---------------------------------------------------------------------------
+// Are.na, against a stub
+
+const ARENA_STUB_PORT = Number(process.env.ARENA_STUB_PORT ?? 4099);
+
+const stubOwner = { id: 1, type: 'User', slug: 'stub-user', name: 'Stub User' };
+const stubGroup = { id: 10, type: 'Group', slug: 'stub-group', name: 'Stub Group' };
+const stubChannel = (id: number, slug: string, visibility: string, updated: string, owner: object) => ({
+  id, type: 'Channel', slug, title: `Title ${slug}`, visibility, state: 'available',
+  updated_at: updated, counts: { blocks: 3 }, owner,
+});
+const OWN_PUBLIC = stubChannel(101, 'stub-public', 'public', '2026-01-03T00:00:00Z', stubOwner);
+const OWN_PRIVATE = stubChannel(102, 'stub-private', 'private', '2026-01-05T00:00:00Z', stubOwner);
+const GROUP_CLOSED = stubChannel(103, 'stub-group-closed', 'closed', '2026-01-02T00:00:00Z', stubGroup);
+const GROUP_OTHER = stubChannel(104, 'stub-group-other', 'public', '2026-01-04T00:00:00Z', stubGroup);
+const image = (id: number, visibility = 'public') => ({
+  id, type: 'Image', title: `img ${id}`, visibility,
+  image: { src: `https://d2w9rnfcy7mm78.cloudfront.net/${id}/original.jpg`, width: 10, height: 10, small: { src: `https://images.are.na/${id}/small` } },
+});
+const page = (data: unknown[], next: number | null = null) => ({ data, meta: { next_page: next, total_count: data.length } });
+
+const ARENA_ROUTES: Record<string, [number, unknown]> = {
+  '/users/stub-user': [200, { ...stubOwner, avatar: null }],
+  '/users/1/contents?page=1': [200, page([OWN_PUBLIC, OWN_PRIVATE, GROUP_CLOSED])],
+  '/users/1/groups?page=1': [200, page([{ id: 10, slug: 'stub-group' }, { id: 11, slug: 'stub-broken-group' }])],
+  '/groups/10/contents?page=1': [200, page([GROUP_CLOSED, GROUP_OTHER])],
+  '/groups/11/contents?page=1': [500, { error: 'boom' }],
+  '/channels/stub-public': [200, OWN_PUBLIC],
+  '/channels/stub-private': [200, OWN_PRIVATE],
+  '/channels/stub-rate-limited': [429, { error: 'slow down' }],
+  '/channels/101/contents?page=1': [200, page([image(1), { id: 2, type: 'Text', title: 'not an image' }], 2)],
+  '/channels/101/contents?page=2': [200, page([image(3), image(4, 'private')])],
+};
+
+function startArenaStub(): Promise<http.Server> {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://stub');
+    const key = url.pathname.replace(/^\/v3/, '') + (url.searchParams.has('page') ? `?page=${url.searchParams.get('page')}` : '');
+    const [status, body] = ARENA_ROUTES[key] ?? [404, { error: 'not found' }];
+    res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+  });
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(ARENA_STUB_PORT, () => resolve(server));
+  });
+}
+
+const SET_ARENA_USER = `mutation($input: ArenaSetUserInput!) { arenaSetUser(input: $input) { viewer { arena { user { id slug name } } } } }`;
+const ARENA_PROFILE = `query($source: ArenaChannelSource) { viewer { arena { user { slug } channels(first: 50, source: $source) {
+  totalCount truncated edges { node { slug visibility owner { isGroup } } } } } } }`;
+const ARENA_CHANNEL = `query($slug: String!, $after: String) { arenaChannel(slug: $slug) { slug url visibility
+  images(first: 2, after: $after) { edges { node { id src thumbnailSrc } } pageInfo { hasNextPage endCursor } } } }`;
+
+async function arenaSuite(token: string): Promise<void> {
+  console.log('\nAre.na');
+  const probe = await gql(`{ arenaChannel(slug: "stub-public") { slug } }`);
+  if (probe.data?.arenaChannel?.slug !== 'stub-public') {
+    console.log(`  - skipped: the server isn't using the stub (start it with ARENA_API_URL=http://localhost:${ARENA_STUB_PORT})`);
+    return;
+  }
+
+  await expectRefused('arenaSetUser anonymous', SET_ARENA_USER, { input: { slug: 'stub-user' } }, undefined, ['UNAUTHENTICATED', 'FORBIDDEN']);
+  await expectRefused('arenaSetUser unknown slug', SET_ARENA_USER, { input: { slug: 'nobody-here' } }, token, ['NOT_FOUND']);
+  check('nothing saved after the refusal', (await ok(ARENA_PROFILE, {}, token)).viewer.arena === null);
+
+  const saved = (await ok(SET_ARENA_USER, { input: { slug: ' Stub-User ' } }, token)).arenaSetUser.viewer.arena;
+  check('arenaSetUser saves the Are.na user (trimmed, lowercased)', saved?.user.slug === 'stub-user' && saved.user.id === 1, saved);
+
+  const all = (await ok(ARENA_PROFILE, { source: 'ALL' }, token)).viewer.arena.channels;
+  const slugs = (c: any) => c.edges.map((e: any) => e.node.slug);
+  check('ALL: own + group channels, de-duplicated, newest first', JSON.stringify(slugs(all)) === JSON.stringify(['stub-group-other', 'stub-public', 'stub-group-closed']), slugs(all));
+  check('ALL: private channel left out', !slugs(all).includes('stub-private'));
+  check('ALL: a failing group is skipped, not fatal', all.totalCount === 3 && all.truncated === false, all);
+  check('group-owned channel marked', all.edges.find((e: any) => e.node.slug === 'stub-group-closed')?.node.owner.isGroup === true);
+  check('closed visibility reported', all.edges.find((e: any) => e.node.slug === 'stub-group-closed')?.node.visibility === 'CLOSED');
+  const own = (await ok(ARENA_PROFILE, { source: 'OWN' }, token)).viewer.arena.channels;
+  check('OWN: only channels the user made', JSON.stringify(slugs(own)) === JSON.stringify(['stub-public', 'stub-group-closed']), slugs(own));
+  const groups = (await ok(ARENA_PROFILE, { source: 'GROUPS' }, token)).viewer.arena.channels;
+  check('GROUPS: only group channels', JSON.stringify(slugs(groups)) === JSON.stringify(['stub-group-other', 'stub-group-closed']), slugs(groups));
+
+  const ch = (await ok(ARENA_CHANNEL, { slug: 'stub-public' })).arenaChannel;
+  check('arenaChannel works anonymously', ch?.url === 'https://www.are.na/stub-user/stub-public' && ch.visibility === 'PUBLIC', ch);
+  check('page 1: images only, original src and small thumbnail', ch.images.edges.length === 1 && ch.images.edges[0].node.thumbnailSrc.endsWith('/small') && ch.images.pageInfo.hasNextPage, ch.images);
+  const p2 = (await ok(ARENA_CHANNEL, { slug: 'stub-public', after: ch.images.pageInfo.endCursor })).arenaChannel.images;
+  check('page 2 follows the cursor; private block left out', JSON.stringify(p2.edges.map((e: any) => e.node.id)) === '[3]' && !p2.pageInfo.hasNextPage, p2);
+  check('private channel resolves to null', (await ok(ARENA_CHANNEL, { slug: 'stub-private' })).arenaChannel === null);
+  check('unknown channel resolves to null', (await ok(ARENA_CHANNEL, { slug: 'no-such-channel' })).arenaChannel === null);
+  await expectRefused('Are.na 429', ARENA_CHANNEL, { slug: 'stub-rate-limited' }, undefined, ['RATE_LIMITED']);
+  await expectRefused('backward pagination', `{ arenaChannel(slug: "stub-public") { images(last: 2) { edges { cursor } } } }`, {}, undefined, ['BAD_USER_INPUT']);
+
+  check('arenaClearUser', (await ok('mutation { arenaClearUser }', {}, token)).arenaClearUser === true);
+  check('viewer.arena is null after clearing', (await ok(ARENA_PROFILE, {}, token)).viewer.arena === null);
+  check('clearing again is still true', (await ok('mutation { arenaClearUser }', {}, token)).arenaClearUser === true);
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes('--setup')) return setup();
 
@@ -597,6 +699,12 @@ async function main(): Promise<void> {
     await photoSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await loraSuite(admin.id, admin.token, accounts[MEMBER_EMAIL].token);
     await uploadSuite(admin.token, accounts[MEMBER_EMAIL].token);
+    const stub = await startArenaStub();
+    try {
+      await arenaSuite(accounts[MEMBER_EMAIL].token);
+    } finally {
+      stub.close();
+    }
   } finally {
     await deleteAccounts().catch((e) => console.error('  ! test account cleanup failed (run --cleanup):', e));
     await mongoose.disconnect();

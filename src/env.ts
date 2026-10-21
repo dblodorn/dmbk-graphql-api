@@ -89,4 +89,10 @@ export const env = {
    * *.dmbk.io, localhost:3000) — the CORS allowlist. Pattern rules: `lib/hosts.ts`.
    */
   allowedOrigins: hostPatterns('ALLOWED_ORIGINS'),
+
+  /**
+   * Are.na's v3 API. Read anonymously: only public and closed channels are
+   * served, so no credential is needed. Overridden by the tests' stub.
+   */
+  arenaApiUrl: (process.env.ARENA_API_URL || 'https://api.are.na/v3').replace(/\/+$/, ''),
 } as const;

@@ -8,6 +8,7 @@ import { setImageHidden, setTrainingHidden } from '../lib/lora/repository.js';
 import { PhotoRef } from './types/photo.js';
 import { GeneratedImageRef, LoraTrainingRef } from './types/lora.js';
 import { ViewerRef } from './types/viewer.js';
+import { clearArenaProfile, setArenaProfile } from '../lib/arena/profile.js';
 
 /*
  * Every mutation here is a Relay input-object mutation: one `input` argument,
@@ -236,4 +237,40 @@ builder.relayMutationField(
       generatedImage: t.field({ type: GeneratedImageRef, resolve: (payload) => payload.generatedImage }),
     }),
   },
+);
+
+// ---------------------------------------------------------------------------
+// Are.na (signed in)
+
+builder.relayMutationField(
+  'arenaSetUser',
+  {
+    inputFields: (t) => ({
+      slug: t.string({ required: true, description: 'The Are.na username, as in are.na/<slug>.' }),
+    }),
+  },
+  {
+    authScopes: { signedIn: true },
+    description: "Save this account's Are.na user. Fails with NOT_FOUND when Are.na doesn't know the slug.",
+    resolve: async (_root, { input }, context) => {
+      await setArenaProfile(context.viewer!.id, input.slug);
+      return { viewer: context.viewer! };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      viewer: t.field({ type: ViewerRef, resolve: (payload: { viewer: Viewer }) => payload.viewer }),
+    }),
+  },
+);
+
+builder.mutationField('arenaClearUser', (t) =>
+  t.boolean({
+    authScopes: { signedIn: true },
+    description: "Forget this account's Are.na user. True even when none was saved.",
+    resolve: async (_root, _args, context) => {
+      await clearArenaProfile(context.viewer!.id);
+      return true;
+    },
+  }),
 );
