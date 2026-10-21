@@ -39,17 +39,17 @@ Ordered across repos. Every merge to `main` here deploys. lora-trainer's PR depe
 
 ## 2. lora-trainer PR (`dblodorn/lora-trainer`)
 
-Built in lora-trainer PR #29 and checked locally against the production API; ticked once merged and verified on production.
+Built in lora-trainer PR #29, merged and deployed 2026-10-21, and verified on production by the owner.
 
-- [ ] 2.1 `src/server/api/features/arena.ts`:
+- [x] 2.1 `src/server/api/features/arena.ts`:
   - `getChannelImages` calls the API's `arenaChannel` (slug from the URL, all pages up to the current 100-image behaviour).
   - Add `profile`, `setUser`, `clearUser` and `myChannels`, forwarding the viewer's bearer.
   - Remove `are.na`, `types/arena.d.ts` and the v2 fetch.
-- [ ] 2.2 `/auth`: an "Are.na username" field with save/clear, showing the saved user.
-- [ ] 2.3 Train page:
+- [x] 2.2 `/auth`: an "Are.na username" field with save/clear, showing the saved user.
+- [x] 2.3 Train page:
   - A channel picker (own / group) next to the URL field. Picking a channel fills the URL and loads it.
   - Pasting keeps working without a saved username.
-- [ ] 2.4 Typecheck, then verify on production: save your username, see your own and group channels, train on one, clear it.
+- [x] 2.4 Typecheck, then verify on production: save your username, see your own and group channels, train on one, clear it.
 
 ## 3. Later (not in this change)
 

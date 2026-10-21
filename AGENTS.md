@@ -32,7 +32,7 @@ A Relay GraphQL API (Pothos + Yoga + Mongoose) over data **owned by two other ap
 | `lora-trainer` | `lora_trainings`, `generated_images` | `dblodorn/lora-trainer` |
 | `dmbk-accounts` | `user`, `account`, `session`, `arena_profiles` | **this API** (better-auth manages its three collections and their indexes; `lib/arena/profile.ts` owns `arena_profiles` and creates its one index) |
 
-Both apps still read/write these collections directly (tRPC). The plan is to move their clients onto this API and retire their own endpoints — dmbk's `/api/graphql` (`src/server/graphql/`) and the tRPC routers — **one capability at a time, only once the replacement here is live**. Accounts live here, in `dmbk-accounts`; both apps are moving their sign-in onto it (`openspec/changes/google-accounts/`). The `user`/`session`/`account`/`verification`/`walletAddress` collections in the two app DBs belong to those apps' old SIWE setups; this API does not touch them, and they are dropped once both apps have moved.
+Both apps still read/write these collections directly (tRPC). The plan is to move their clients onto this API and retire their own endpoints — dmbk's `/api/graphql` (`src/server/graphql/`) and the tRPC routers — **one capability at a time, only once the replacement here is live**. Accounts live here, in `dmbk-accounts`; both apps are moving their sign-in onto it (`openspec/changes/google-accounts/`). Both apps have moved; their old SIWE collections (`user`/`session`/`account`/`verification`/`walletAddress`) were backed up and dropped on 2026-10-21.
 
 ## Architecture
 
