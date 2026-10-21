@@ -131,8 +131,8 @@ Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/li
 
 `dmbk-photos` is for photos only. The SoundCloud snapshot (`sound_snapshots`, written by dmbk's `src/lib/soundcloud/build-playlists.ts`) moves to its own database, `dmbk-sound`, still owned by dmbk. This API reads it as `dmbkSoundPlaylists` (formerly `dmbkPhotosSoundPlaylists`). OpenSpec change: `move-sound-to-dmbk-sound`.
 
-- [ ] Atlas: `readWrite` on `dmbk-sound` for `graphql-api` and `dmbk-photos-app`.
-- [ ] `npm run move:sound-snapshots -- --apply` copies the snapshot.
+- [x] Atlas: `readWrite` on `dmbk-sound` for `graphql-api` and `dmbk-photos-app` (2026-10-21).
+- [x] `npm run move:sound-snapshots -- --apply` copies the snapshot (2026-10-21).
 - [ ] dmbk writes and reads the snapshot in `dmbk-sound` (dmbk PR), and a production build advances its `fetchedAt` there.
 - [ ] This API reads `dmbk-sound` (deployed).
 - [ ] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots`, and a later check confirms no old dmbk build has recreated it.

@@ -2,8 +2,8 @@
 
 ## 1. Access and current state
 
-- [ ] 1.1 In Atlas (cluster `dmbk-world`), grant `readWrite` on `dmbk-sound` to `dmbk-photos-app` and `graphql-api`. Verify both users' roles list `dmbk-sound` in the Atlas UI or `atlas dbusers describe`.
-  - `graphql-api`: done 2026-10-21 (roles `dmbk-photos`, `lora-trainer`, `dmbk-accounts`, `dmbk-sound`; scope `dmbk-world` kept). `dmbk-photos-app`: pending.
+- [x] 1.1 In Atlas (cluster `dmbk-world`), grant `readWrite` on `dmbk-sound` to `dmbk-photos-app` and `graphql-api`. Verify both users' roles list `dmbk-sound` in the Atlas UI or `atlas dbusers describe`.
+  - `graphql-api`: done 2026-10-21 (roles `dmbk-photos`, `lora-trainer`, `dmbk-accounts`, `dmbk-sound`; scope `dmbk-world` kept). `dmbk-photos-app`: done 2026-10-21 (roles `dmbk-photos`, `dmbk-sound`).
 - [x] 1.2 Record the current state: `dmbk-photos.sound_snapshots` document count (expect 1, `_id: "playlists"`), its `fetchedAt` and `schemaVersion`, and confirm `dmbk-sound` doesn't exist yet. Note the values in the PR description.
   - Recorded 2026-10-21: 1 document, `_id: "playlists"`, `fetchedAt: 2026-10-20T23:59:44.436Z`, `schemaVersion: 1`, 14 playlists. `graphql-api` is refused `listCollections` on `dmbk-sound` (task 1.1 is needed).
 
