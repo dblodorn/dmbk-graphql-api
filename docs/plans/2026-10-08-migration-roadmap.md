@@ -39,7 +39,7 @@ Remaining before the first deploy:
 - [x] Fix `NODE_ENV` in `ecosystem.config.cjs`. It set `development`, which made `JWT_SECRET` optional (falling back to a known dev secret) and returned error details to clients. It now sets `production`, so **`JWT_SECRET` must be in the droplet's `.env` before this deploys**, or the server exits on startup.
 - [x] Configure CORS in `createYoga`. It now allows only origins whose host matches `SIWE_DOMAINS` (https, or http for localhost), with credentials off since auth is a bearer token.
 - [x] Support patterns in `SIWE_DOMAINS` (`*.dmbk.io`), mirroring dmbk's `isAllowedHost` (`src/lib/hosts.ts`).
-  - [ ] Vercel previews still can't sign in. `*.vercel.app` was left out on purpose, because anyone can deploy there and get a signature that works here. Options: put previews on a custom subdomain such as `*.preview.dmbk.io`, or list specific preview hosts.
+  - [ ] Vercel previews still can't sign in. `*.vercel.app` was left out on purpose, because anyone can deploy there and get a signature that works here. (That was about SIWE. Since Phase 1.5, `ALLOWED_ORIGINS` is CORS only, with bearer tokens and credentials off, so `*.vercel.app` was added to it on 2026-10-21 for dmbk's preview galleries. Google sign-in on previews is a separate limit: Google's authorized JavaScript origins.) Options: put previews on a custom subdomain such as `*.preview.dmbk.io`, or list specific preview hosts.
 - [ ] Optional: quiet Yoga's `ERR` logging for expected domain errors such as failed sign-ins and forbidden calls, so real failures stand out in the PM2 logs.
 
 ---
@@ -114,15 +114,15 @@ Needs: `FAL_KEY` and the Spaces credentials from Phase 2. (`payment.ts` is delet
 
 Do this per capability, in this order:
 
-1. **dmbk admin gallery reads.**
+1. **dmbk admin gallery reads.** ✅ Done 2026-10-21 (dmbk OpenSpec change `reads-through-graphql-api`, dblodorn/dmbk#37): the library and edit view read through Relay over dmbk's `/api/admin/graphql` proxy.
    - Today it calls dmbk's own `/api/graphql` (`src/server/graphql/`) with hand-written types.
    - Point it at this API with Relay, and add the Relay compiler to dmbk.
    - Admin sign-in has already moved to this API's Google sessions in Phase 1.5.
 2. **dmbk admin writes.** Edit, hide, upload (after Phase 2) and delete move from tRPC (`features/photos.ts`) to this API's mutations.
    - Before switching upload over, confirm the Space's CORS rules allow `PUT` from every admin origin (`dmbk.io`, previews, `localhost:3000`). The browser PUTs straight to the `uploadUrl`.
    - Progress (dmbk OpenSpec change `admin-writes-through-graphql-api`): upload, edit, hide and the new delete all call this API's mutations through a same-origin proxy in dmbk (`/api/admin/graphql`), which forwards only Relay persisted operations with the session token from dmbk's HTTP-only cookie. dmbk's tRPC write procedures are deleted, along with its Spaces client and sharp derivatives, and AVIF now finalizes from the admin. dmbk's `pnpm verify:admin` drives its screens against a local server here, using `npm run test:mutations -- --admin-token` for its sessions. Relay is in dmbk for writes only: reads (step 1) and deleting dmbk's `/api/graphql` and tRPC read procedures (step 3) remain.
-3. **Delete dmbk's temporary API.** Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. (better-auth and the SIWE wiring are already gone, in Phase 1.5.)
-4. **dmbk public pages.** Today the server components import `src/lib/photos/repository.ts` directly. Decide whether they read this API too, or keep the direct Mongo read as a deliberately read-only path. dmbk's own design doc leaves this open.
+3. **Delete dmbk's temporary API.** ✅ Done 2026-10-21 (dmbk#37): `/api/graphql`, `/api/trpc`, the tRPC router and `lib/photos/repository.ts` are gone. Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. (better-auth and the SIWE wiring are already gone, in Phase 1.5.)
+4. **dmbk public pages.** ✅ Decided and done 2026-10-21 (dmbk#37): they read this API. `/photos` renders its first page on the server from `dmbkPhotos` and the browser pages against the API directly (CORS admits `dmbk.io`, `*.dmbk.io` and `*.vercel.app`). `/sound`'s fallback reads `dmbkSoundPlaylists`. dmbk no longer opens `dmbk-photos`; its `dmbk-photos-app` user has `readWrite` on `dmbk-sound` only, for the build's snapshot write. The `dmbk-photos` indexes are this API's now (#21).
 5. **lora-trainer.** Move reads, then hide/unhide, then (after Phase 3) training and generation. Then delete its tRPC routers and its direct Mongo access.
 
 Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/lib/photos/keywords.ts` and `CLAUDE.md` can go, and this repo becomes the source of truth for the document shapes.
@@ -135,7 +135,7 @@ Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/li
 - [x] `npm run move:sound-snapshots -- --apply` copies the snapshot (2026-10-21).
 - [x] dmbk writes and reads the snapshot in `dmbk-sound` (dmbk #36, 2026-10-21), and a production build advances its `fetchedAt` there.
 - [x] This API reads `dmbk-sound` (deployed 2026-10-21, #15).
-- [ ] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots` (dropped 2026-10-21), and a later check confirms no old dmbk build has recreated it.
+- [x] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots` (dropped 2026-10-21). It can't come back: `dmbk-photos-app` lost `dmbk-photos` access the same day, and the collection was confirmed still absent.
 
 ---
 

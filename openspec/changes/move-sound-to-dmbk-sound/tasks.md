@@ -39,4 +39,5 @@
   - Done 2026-10-21. #15 deployed (run 39643545715, typecheck and deploy succeeded). Production `dmbkSoundPlaylists` returns `fetchedAt 2026-10-21T16:45:08.158Z` with 14 playlists, and `dmbkPhotosSoundPlaylists` fails with `GRAPHQL_VALIDATION_FAILED`.
 - [x] 6.4 Re-run `-- --apply` (catches a build that wrote to the old location between 6.1 and 6.2, and must report "target is newer, nothing to do"), then `-- --drop-source`. Verify `dmbk-photos` lists no `sound_snapshots` collection.
   - Done 2026-10-21. The `--apply` re-run reported the target newer (`16:45:08` vs `16:31:37`), nothing to do. `--drop-source` dropped the collection (1 document, present in `dmbk-sound`). `dmbk-photos` now lists `photos`, `keywords` and the legacy SIWE collections only.
-- [ ] 6.5 A day or more later, after any old dmbk preview builds have aged out, confirm `dmbk-photos.sound_snapshots` hasn't been recreated. Drop it again if it has, then tick the roadmap line.
+- [x] 6.5 A day or more later, after any old dmbk preview builds have aged out, confirm `dmbk-photos.sound_snapshots` hasn't been recreated. Drop it again if it has, then tick the roadmap line.
+  - Done 2026-10-21. `dmbk-photos.sound_snapshots` is still absent. It can't be recreated: dmbk's `dmbk-photos-app` user was narrowed to `readWrite@dmbk-sound` the same day (dmbk `reads-through-graphql-api`).
