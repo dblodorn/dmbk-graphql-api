@@ -58,9 +58,9 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
 - [x] 2.2 `src/server/api/trpc.ts` and `src/server/graphql/context.ts`: resolve the viewer by forwarding `Authorization` to the API's `viewer { id email isAdmin }`, and require `isAdmin` for admin procedures.
 - [x] 2.3 Check `src/app/admin/` for server-side session reads, and move them to the client guard (see design).
 - [x] 2.4 Remove `src/lib/auth.ts`, `auth-client.ts`, `wagmi.ts`, `src/app/api/auth/[...all]`, the wagmi providers and `SignIn.tsx`'s wallet UI. Remove the `better-auth`, `wagmi` and `viem` deps if nothing else imports them, and the `BETTER_AUTH_*` env vars on Vercel.
-- [ ] 2.5 Verify on production: sign in, edit a photo, hide or unhide a photo, upload.
+- [x] 2.5 Verify on production: sign in, edit a photo, hide or unhide a photo, upload.
   - [x] dmbk PR #30 merged and deployed; production sign-in works (2026-10-20). Old auth vars removed from Vercel.
-  - [ ] Edit, hide/unhide and upload on production.
+  - [x] Edit, hide/unhide and upload on production (owner, 2026-10-21).
 
 ## 3. lora-trainer PR (`dblodorn/lora-trainer`)
 
@@ -80,4 +80,4 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
 - [x] 4.1 Back up the `user`, `session`, `account`, `verification` and `walletAddress` collections in `dmbk-photos` and `lora-trainer` with `mongodump`, then drop them.
   - Done 2026-10-21. Backed up with `mongodump` to `~/dev/backups/old-siwe-auth-2026-10-21/` on the owner's machine: dmbk-photos user 2, session 14, account 2, verification 0, walletAddress 2; lora-trainer user 1, session 13, account 2, verification 0, walletAddress 2. Counts were checked against the dump, then all 10 collections were dropped.
 - [x] 4.2 Remove the old env vars on both Vercel projects. dmbk on 2026-10-20; lora-trainer's 8 SIWE/payment vars on 2026-10-21. (lora-trainer's `TURSO_*` remain, used only by its finished migration script.)
-- [ ] 4.3 Archive this change.
+- [x] 4.3 Archive this change. Also brings `graphql-schema-naming` up to date: the SIWE names are replaced by `signInWithGoogle`/`signOut`, and the `arena` prefix is added.

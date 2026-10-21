@@ -7,7 +7,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Relay reads, SIWE sign-in, curation mutations | Deployed 2026-10-20 at `graphql.dmbk.network` |
-| 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Planned — `openspec/changes/google-accounts/` |
+| 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Done 2026-10-21 — `openspec/changes/archive/2026-10-21-google-accounts/` |
 | 2 | Photo upload and delete | Deployed 2026-10-20 |
 | 3 | LoRA training and image generation | Planned (needs investigation first) |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | In progress — dmbk admin writes moved (step 2) |

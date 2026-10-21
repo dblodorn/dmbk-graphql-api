@@ -53,5 +53,5 @@ Built in lora-trainer PR #29, merged and deployed 2026-10-21, and verified on pr
 
 ## 3. Later (not in this change)
 
-- [ ] 3.1 Private channels via Are.na OAuth: one redirect URI per Are.na application, so use either one application per environment or a single API-hosted callback with a ticket hand-off (design, Later).
-- [ ] 3.2 Archive this change.
+- Not planned yet: private channels via Are.na OAuth: one redirect URI per Are.na application, so use either one application per environment or a single API-hosted callback with a ticket hand-off (design, Later).
+- [x] 3.2 Archive this change.
