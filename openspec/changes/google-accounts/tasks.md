@@ -46,30 +46,34 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
   - CLAUDE.md and AGENTS.md: the env and Auth sections, owner = `ownerId`, the `dmbk-accounts` row in the DB table, and the line saying this API doesn't touch the apps' user collections.
   - The roadmap's Phase 3–4 wording.
 - [x] 1.11 `npm run typecheck`. Grep the repo (excluding `node_modules`, `openspec/`) for `siwe|SIWE|ALLOWED_ADDRESSES|jwt|viem`: no matches.
-- [ ] 1.12 Set the new env vars on the droplet and remove the old ones. Then merge, deploy, and sign in with Google once to create the owner's user.
+- [x] 1.12 Set the new env vars on the droplet and remove the old ones. Then merge, deploy, and sign in with Google once to create the owner's user.
   - [x] New vars set on the droplet (2026-10-20, `BETTER_AUTH_SECRET` generated there). Backup: `.env.bak-20261020-184748`.
-  - [ ] Merge and deploy. Check that `signInWithGoogle` works against `https://graphql.dmbk.network`.
-  - [ ] Then remove `JWT_SECRET`, `ALLOWED_ADDRESSES` and `SIWE_DOMAINS` from the droplet. The SIWE code that's live now needs `JWT_SECRET` to start, so they stay until this deploys.
+  - [x] Merge and deploy (PR #9). Check that `signInWithGoogle` works against `https://graphql.dmbk.network`.
+  - [x] Then remove `JWT_SECRET`, `ALLOWED_ADDRESSES` and `SIWE_DOMAINS` from the droplet. The SIWE code that's live now needs `JWT_SECRET` to start, so they stay until this deploys.
 - [x] 1.13 Run the backfill, dry-run first and then `--apply`. Re-run the dry-run: it should report 0 records missing `ownerId`. Done 2026-10-20, before the deploy: the owner signed in locally against the shared `dmbk-accounts` (user `6ad7b8425c419c7374acaab4`), and 16 trainings and 352 images were mapped from `0xbfaa…c06c`.
 
 ## 2. dmbk PR (`dblodorn/dmbk`)
 
-- [ ] 2.1 Google Identity Services button on the admin sign-in. Pass the ID token to `signInWithGoogle`, store the token, and attach it in the tRPC and `/api/graphql` clients.
-- [ ] 2.2 `src/server/api/trpc.ts` and `src/server/graphql/context.ts`: resolve the viewer by forwarding `Authorization` to the API's `viewer { id email isAdmin }`, and require `isAdmin` for admin procedures.
-- [ ] 2.3 Check `src/app/admin/` for server-side session reads, and move them to the client guard (see design).
-- [ ] 2.4 Remove `src/lib/auth.ts`, `auth-client.ts`, `wagmi.ts`, `src/app/api/auth/[...all]`, the wagmi providers and `SignIn.tsx`'s wallet UI. Remove the `better-auth`, `wagmi` and `viem` deps if nothing else imports them, and the `BETTER_AUTH_*` env vars on Vercel.
+- [x] 2.1 Google Identity Services button on the admin sign-in. Pass the ID token to `signInWithGoogle`, store the token, and attach it in the tRPC and `/api/graphql` clients.
+- [x] 2.2 `src/server/api/trpc.ts` and `src/server/graphql/context.ts`: resolve the viewer by forwarding `Authorization` to the API's `viewer { id email isAdmin }`, and require `isAdmin` for admin procedures.
+- [x] 2.3 Check `src/app/admin/` for server-side session reads, and move them to the client guard (see design).
+- [x] 2.4 Remove `src/lib/auth.ts`, `auth-client.ts`, `wagmi.ts`, `src/app/api/auth/[...all]`, the wagmi providers and `SignIn.tsx`'s wallet UI. Remove the `better-auth`, `wagmi` and `viem` deps if nothing else imports them, and the `BETTER_AUTH_*` env vars on Vercel.
 - [ ] 2.5 Verify on production: sign in, edit a photo, hide or unhide a photo, upload.
+  - [x] dmbk PR #30 merged and deployed; production sign-in works (2026-10-20). Old auth vars removed from Vercel.
+  - [ ] Edit, hide/unhide and upload on production.
 
 ## 3. lora-trainer PR (`dblodorn/lora-trainer`)
 
-- [ ] 3.1 The same sign-in, token storage and tRPC-context adapter as 2.1–2.2. `ctx.viewer` replaces `ctx.session.user.walletAddress` everywhere.
-- [ ] 3.2 Write `ownerId: viewer.id` on new trainings (`lora.ts#createPendingLora`) and images (`generate.ts`). Owner checks in `lora.ts` compare `ownerId`. Stop writing `walletAddress`. `db.ts` makes it optional and drops the `walletAddress` index in favor of `{ ownerId: 1, hidden: 1 }`.
-- [ ] 3.3 Strip crypto:
+- [x] 3.1 The same sign-in, token storage and tRPC-context adapter as 2.1–2.2. `ctx.viewer` replaces `ctx.session.user.walletAddress` everywhere.
+- [x] 3.2 Write `ownerId: viewer.id` on new trainings (`lora.ts#createPendingLora`) and images (`generate.ts`). Owner checks in `lora.ts` compare `ownerId`. Stop writing `walletAddress`. `db.ts` makes it optional and drops the `walletAddress` index in favor of `{ ownerId: 1, hidden: 1 }`.
+- [x] 3.3 Strip crypto:
   - Delete `features/payment.ts` and its router entry, `PaymentGate`, `SignInFlow`, `lib/wagmi.ts`, `lib/auth.ts`, `lib/auth-client.ts` and `pages/api/auth/[...all].ts`.
   - In `fal.ts`, remove `paymentTxHash`, the payment verification and the refunds. In `generate.ts`, remove the rate limit and `remaining`.
   - In `env.ts`, remove the admin wallet, the payment wallet key, the recipient and the QA wallets.
   - Remove the `viem`, `wagmi` and `better-auth` deps, and the env vars on Vercel.
 - [ ] 3.4 `npm run typecheck`, then verify on production: sign in, train a LoRA, generate images, hide or unhide. Re-run the backfill (dry-run, then `--apply` if needed) for records written between 1.13 and this deploy.
+  - [x] lora-trainer PR #28 merged and deployed. Sign-in and hide/unhide verified locally against the production API. Backfill dry-run 2026-10-21: every record has an `ownerId`.
+  - [ ] Train and generate on production.
 
 ## 4. Cleanup
 

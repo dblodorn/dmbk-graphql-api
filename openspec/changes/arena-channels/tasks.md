@@ -4,7 +4,7 @@ Ordered across repos. Every merge to `main` here deploys. lora-trainer's PR depe
 
 ## 0. Spike (no merged code)
 
-- [ ] 0.1 With the owner's Are.na slug, check anonymously:
+- [x] 0.1 With the owner's Are.na slug, check anonymously:
   - Does `users/{slug}/contents?type=Channel` include every public/closed channel they made, group-owned ones too?
   - Does `users/{slug}/groups` list their groups?
   - Does `groups/{id}/contents?type=Channel` return those groups' public channels?
@@ -35,9 +35,11 @@ Ordered across repos. Every merge to `main` here deploys. lora-trainer's PR depe
   - a private channel filtered from lists and from `arenaChannel`
   - a 429
 - [x] 1.6 Docs: README (the schema), CLAUDE.md / AGENTS.md (the `arena_profiles` row in the DB table, and the Are.na section), and the note on the `arena` prefix.
-- [ ] 1.7 `npm run typecheck`, tests, merge and deploy.
+- [x] 1.7 `npm run typecheck`, tests, merge and deploy. PR #17, deployed 2026-10-21; `arenaChannel` verified on production.
 
 ## 2. lora-trainer PR (`dblodorn/lora-trainer`)
+
+Built in lora-trainer PR #29 and checked locally against the production API; ticked once merged and verified on production.
 
 - [ ] 2.1 `src/server/api/features/arena.ts`:
   - `getChannelImages` calls the API's `arenaChannel` (slug from the URL, all pages up to the current 100-image behaviour).

@@ -15,6 +15,8 @@
 - **This API:** owns accounts in `dmbk-accounts`. Apps call it server-to-server with the viewer's bearer token.
 - **lora-trainer:** `arena.ts` reads a pasted channel URL with `are.na` (v2) plus a v2 fetch for the title. `fal.ts` zips the chosen image URLs for training.
 
+**Spike (task 0.1, 2026-10-21, anonymous):** the owner's account (`dain-blodorn-kim`, id 21177) lists 31 channels from `users/{slug}/contents?type=Channel` in one page: 8 public and 23 closed, all owned by the user, none by a group. `users/{slug}/groups` returns no groups. That matches the profile's channel count of 31. A full `Viewer.arena.channels` listing costs 2 Are.na calls. A different, group-heavy test account (`charles-broskoski`, 21 groups) showed group-owned channels coming back from `users/{slug}/contents` with `owner.type: "Group"`. The group path is covered by the stub tests rather than by the owner's data.
+
 ## Goals / Non-Goals
 
 **Goals:**
