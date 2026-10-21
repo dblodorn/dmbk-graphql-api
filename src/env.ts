@@ -42,6 +42,8 @@ export const env = {
   photosDbName: process.env.PHOTOS_DB_NAME || 'dmbk-photos',
   /** Owned by the lora-trainer app. */
   loraDbName: process.env.LORA_DB_NAME || 'lora-trainer',
+  /** Owned by the dmbk app (the SoundCloud snapshot). Read-only here. */
+  soundDbName: process.env.SOUND_DB_NAME || 'dmbk-sound',
 
   /** Photos store storage keys; public URLs are this base + key. No trailing slash. */
   cdnUrl: required('DO_SPACES_CDN_URL').replace(/\/+$/, ''),

@@ -61,6 +61,7 @@ NODE_ENV=development
 # The dmbk-world cluster. The database is chosen per collection (below), not by this URI.
 MONGODB_URI=mongodb+srv://user:password@cluster.xxxxx.mongodb.net/
 PHOTOS_DB_NAME=dmbk-photos      # default
+SOUND_DB_NAME=dmbk-sound        # default
 LORA_DB_NAME=lora-trainer       # default
 # Public base for photo derivatives — same value as the dmbk app's DO_SPACES_CDN_URL
 DO_SPACES_CDN_URL=https://...
@@ -106,9 +107,9 @@ pm2 start ecosystem.config.cjs
 
 ## API
 
-The API serves content owned by two other apps on the same Atlas cluster: the photo library, keyword vocabulary and SoundCloud snapshot from `dmbk-photos` ([dmbk](https://github.com/dblodorn/dmbk)), and LoRA trainings and generated images from `lora-trainer` ([lora-trainer](https://github.com/dblodorn/lora-trainer)).
+The API serves content owned by two other apps on the same Atlas cluster: the photo library and keyword vocabulary from `dmbk-photos` and the SoundCloud snapshot from `dmbk-sound` (both [dmbk](https://github.com/dblodorn/dmbk)), and LoRA trainings and generated images from `lora-trainer` ([lora-trainer](https://github.com/dblodorn/lora-trainer)).
 
-Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `loraTrainerSetImageHidden`). Are.na fields, which read [Are.na](https://www.are.na)'s public API rather than a database, are prefixed `arena…`. Auth and Relay fields (`viewer`, `node`, `signInWithGoogle`, `signOut`) have no prefix.
+Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…`, `dmbkSound…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `dmbkSoundPlaylists`, `loraTrainerSetImageHidden`). Are.na fields, which read [Are.na](https://www.are.na)'s public API rather than a database, are prefixed `arena…`. Auth and Relay fields (`viewer`, `node`, `signInWithGoogle`, `signOut`) have no prefix.
 
 ### Queries
 
@@ -119,7 +120,7 @@ Fields that read or write one of those databases are prefixed with its name in c
 | `dmbkPhotos` | none (admin for `visibility`/`states`) | Ready, visible photos, newest first; filter by `keywords`. |
 | `dmbkPhotosKeywords` | none | Photo keyword vocabulary with counts. |
 | `loraTrainerTrainings` | none | Completed, visible LoRA trainings; each has an `images` connection. |
-| `dmbkPhotosSoundPlaylists` | none | Latest cached SoundCloud playlists. |
+| `dmbkSoundPlaylists` | none | Latest cached SoundCloud playlists. |
 | `viewer` | session | The signed-in account (`id`, `email`, `name`, `isAdmin`), with its own `loraTrainerTrainings` and `loraTrainerImages` (including hidden), and `arena`: its saved Are.na user and their channels. |
 | `arenaChannel` | none | A public or closed Are.na channel by slug, with an `images` connection; null when private or missing. |
 

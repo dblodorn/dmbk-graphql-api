@@ -18,9 +18,9 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 
 ## Phase 1 — finish and ship
 
-Already in the code: `dmbkPhotos`, `dmbkPhotosKeywords`, `loraTrainerTrainings` (+ `images`), `dmbkPhotosSoundPlaylists`, `node`/`nodes`, `viewer` (+ `loraTrainerTrainings`, `loraTrainerImages`); `siweNonce` / `signInWithEthereum`; `dmbkPhotosUpdatePhoto`, `dmbkPhotosSetPhotoHidden`, `loraTrainerSetTrainingHidden`, `loraTrainerSetImageHidden`.
+Already in the code: `dmbkPhotos`, `dmbkPhotosKeywords`, `loraTrainerTrainings` (+ `images`), `dmbkSoundPlaylists`, `node`/`nodes`, `viewer` (+ `loraTrainerTrainings`, `loraTrainerImages`); `siweNonce` / `signInWithEthereum`; `dmbkPhotosUpdatePhoto`, `dmbkPhotosSetPhotoHidden`, `loraTrainerSetTrainingHidden`, `loraTrainerSetImageHidden`.
 
-Naming (2026-10-20): fields that touch a database are prefixed with its camelCase name (`dmbkPhotos…` / `loraTrainer…`); the names in the checks below are the current ones. New fields in Phases 2–3 follow the same rule.
+Naming (2026-10-20): fields that touch a database are prefixed with its camelCase name (`dmbkPhotos…` / `loraTrainer…`); the names in the checks below are the current ones, except `dmbkPhotosSoundPlaylists`, which became `dmbkSoundPlaylists` when the snapshot moved to `dmbk-sound` (below). New fields in Phases 2–3 follow the same rule.
 
 Remaining before the first deploy:
 
@@ -30,6 +30,7 @@ Remaining before the first deploy:
   - `loraTrainerTrainings`: 14 public of 16, 334 visible images, owner-only fields null when anonymous;
   - `node(id:)` round-trips for `Photo`, `LoraTraining` and `GeneratedImage`.
 - [x] Database access: the API uses its own Atlas user, `graphql-api`, with `readWrite` on `dmbk-photos` and `lora-trainer` only, scoped to the `dmbk-world` cluster. The apps' users (`dmbk-photos-app`, `lora-trainer-app2`) can each reach only their own database.
+  - `dmbk-sound` (2026-10-21): `graphql-api` and `dmbk-photos-app` each need `readWrite` on it as well (see "Sound snapshot → dmbk-sound").
   - An older user, `dmbk-graphql-api`, has `readWriteAnyDatabase` and isn't used by this code. Delete it once nothing else depends on it.
 - [x] Mutations tested against live data (2026-10-20) with `npm run test:mutations`: SIWE sign-in and refusals, `dmbkPhotosUpdatePhoto` keyword normalization and counts, hide/unhide counts and visibility, and LoRA owner/non-owner hide on temporary fixtures. Everything is restored afterwards.
   - Shared with dmbk, not fixed: hiding the last photo that carries a keyword deletes that keyword's entry, and unhiding recreates it with the slug as its label. The display label is lost (`Baja` becomes `baja`). Fix it in both repos or neither.
@@ -125,6 +126,18 @@ Do this per capability, in this order:
 5. **lora-trainer.** Move reads, then hide/unhide, then (after Phase 3) training and generation. Then delete its tRPC routers and its direct Mongo access.
 
 Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/lib/photos/keywords.ts` and `CLAUDE.md` can go, and this repo becomes the source of truth for the document shapes.
+
+## Sound snapshot → dmbk-sound
+
+`dmbk-photos` is for photos only. The SoundCloud snapshot (`sound_snapshots`, written by dmbk's `src/lib/soundcloud/build-playlists.ts`) moves to its own database, `dmbk-sound`, still owned by dmbk. This API reads it as `dmbkSoundPlaylists` (formerly `dmbkPhotosSoundPlaylists`). OpenSpec change: `move-sound-to-dmbk-sound`.
+
+- [x] Atlas: `readWrite` on `dmbk-sound` for `graphql-api` and `dmbk-photos-app` (2026-10-21).
+- [x] `npm run move:sound-snapshots -- --apply` copies the snapshot (2026-10-21).
+- [x] dmbk writes and reads the snapshot in `dmbk-sound` (dmbk #36, 2026-10-21), and a production build advances its `fetchedAt` there.
+- [x] This API reads `dmbk-sound` (deployed 2026-10-21, #15).
+- [ ] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots` (dropped 2026-10-21), and a later check confirms no old dmbk build has recreated it.
+
+---
 
 ## Open questions
 
