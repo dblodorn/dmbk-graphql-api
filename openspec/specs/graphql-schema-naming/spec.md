@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Names every GraphQL entry point after the database it reads or writes (`dmbk-photos` or `lora-trainer`), so clients and readers can tell from the schema alone which app's data a field touches.
+Names every GraphQL entry point after the database it reads or writes (`dmbk-photos`, `dmbk-sound` or `lora-trainer`), so clients and readers can tell from the schema alone which app's data a field touches.
 
 ## Requirements
 
 ### Requirement: Database-scoped fields carry the database prefix
-Every root Query field, root Mutation field and `Viewer` field that reads or writes a database SHALL begin with that database's name in camelCase: `dmbkPhotos` for `dmbk-photos` and `loraTrainer` for `lora-trainer`. If the prefix already says a word, the rest of the name SHALL leave it out (`dmbkPhotos`, not `dmbkPhotosPhotos`; `loraTrainerTrainings`, not `loraTrainerLoraTrainings`). This rule SHALL apply to fields added later as well, including the Phase 2 and Phase 3 fields.
+Every root Query field, root Mutation field and `Viewer` field that reads or writes a database SHALL begin with that database's name in camelCase: `dmbkPhotos` for `dmbk-photos`, `dmbkSound` for `dmbk-sound` and `loraTrainer` for `lora-trainer`. If the prefix already says a word, the rest of the name SHALL leave it out (`dmbkPhotos`, not `dmbkPhotosPhotos`; `dmbkSoundPlaylists`, not `dmbkSoundSoundPlaylists`; `loraTrainerTrainings`, not `loraTrainerLoraTrainings`). This rule SHALL apply to fields added later as well, including the Phase 2 and Phase 3 fields.
 
 #### Scenario: New field follows the convention
-- **WHEN** a root Query, Mutation or `Viewer` field that reads or writes `dmbk-photos` or `lora-trainer` is added
-- **THEN** its name starts with `dmbkPhotos` or `loraTrainer` to match that database
+- **WHEN** a root Query, Mutation or `Viewer` field that reads or writes `dmbk-photos`, `dmbk-sound` or `lora-trainer` is added
+- **THEN** its name starts with `dmbkPhotos`, `dmbkSound` or `loraTrainer` to match that database
 
 ### Requirement: Query field names
 The schema SHALL expose these database-scoped root Query fields, with the same arguments, return types, visibility rules and pagination as before:
@@ -20,8 +20,10 @@ The schema SHALL expose these database-scoped root Query fields, with the same a
 |---|---|---|
 | `dmbkPhotos` | dmbk-photos | `photos` |
 | `dmbkPhotosKeywords` | dmbk-photos | `keywords` |
-| `dmbkPhotosSoundPlaylists` | dmbk-photos | `soundPlaylists` |
+| `dmbkSoundPlaylists` | dmbk-sound | `dmbkPhotosSoundPlaylists` (earlier `soundPlaylists`) |
 | `loraTrainerTrainings` | lora-trainer | `loraTrainings` |
+
+`dmbkPhotosSoundPlaylists` SHALL NOT exist in the schema, and there SHALL be no deprecated alias for it.
 
 #### Scenario: Prefixed photo query
 - **WHEN** an anonymous client queries `dmbkPhotos(first: 10) { edges { node { id } } }`
@@ -34,6 +36,14 @@ The schema SHALL expose these database-scoped root Query fields, with the same a
 #### Scenario: Prefixed LoRA query
 - **WHEN** a client queries `loraTrainerTrainings(first: 10)`
 - **THEN** it receives completed, non-hidden trainings, newest first, each with its `images` connection
+
+#### Scenario: Sound query under its own database prefix
+- **WHEN** a client queries `dmbkSoundPlaylists { fetchedAt }`
+- **THEN** it receives the latest snapshot's `fetchedAt`, with the same `SoundSnapshot` type `dmbkPhotosSoundPlaylists` returned
+
+#### Scenario: Old sound query name rejected
+- **WHEN** a client queries `{ dmbkPhotosSoundPlaylists { fetchedAt } }`
+- **THEN** the request fails validation because `dmbkPhotosSoundPlaylists` is not a field on `Query`
 
 ### Requirement: Mutation field names
 The schema SHALL expose these database-scoped root Mutation fields as Relay input-object mutations, with the same inputs, payload fields, auth rules and side effects as before. Their input and payload types SHALL be named after the new field (`<FieldInPascalCase>Input` / `<FieldInPascalCase>Payload`).
