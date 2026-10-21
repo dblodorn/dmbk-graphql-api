@@ -30,7 +30,7 @@ A Relay GraphQL API (Pothos + Yoga + Mongoose) over data **owned by two other ap
 
 | DB | Collections served | Owning app |
 |---|---|---|
-| `dmbk-photos` | `photos`, `keywords` | `dblodorn/dmbk` (Next.js; `src/server/api/db.ts` there is the schema source of truth) |
+| `dmbk-photos` | `photos`, `keywords` | **this API** since dmbk's reads moved here ([dblodorn/dmbk#37](https://github.com/dblodorn/dmbk/pull/37)); dmbk writes and reads nothing in it. `models/photos.ts` is the schema source of truth, and the indexes are listed below |
 | `dmbk-sound` | `sound_snapshots` (read-only here) | `dblodorn/dmbk` (`src/lib/soundcloud/build-playlists.ts` is the only writer) |
 | `lora-trainer` | `lora_trainings`, `generated_images` | `dblodorn/lora-trainer` |
 | `dmbk-accounts` | `user`, `account`, `session`, `arena_profiles` | **this API** (better-auth manages its three collections and their indexes; `lib/arena/profile.ts` owns `arena_profiles` and creates its one index) |
@@ -43,7 +43,9 @@ ESM (`"type": "module"`, `NodeNext`): relative imports need `.js` extensions in 
 
 **Layers.** `models/` (Mongoose schemas) → `lib/*/repository.ts` (every query and write; all visibility rules) → `schema/` (Pothos types and resolvers, thin). Resolvers never build Mongo filters themselves.
 
-**Models mirror foreign documents exactly.** String `_id`s (UUIDs for photos, hex for LoRA records), ISO-8601 *strings* for dates, explicit `collection` names, `versionKey: false`, no Mongoose timestamps. `autoIndex`/`autoCreate` are off globally (`db/mongoose.ts`) because the owning apps manage indexes — never enable them. (`dmbk-accounts` is written by better-auth's own adapter, not Mongoose.) Both DBs share one connection via `useDb(..., { useCache: true })`.
+**Models mirror foreign documents exactly.** String `_id`s (UUIDs for photos, hex for LoRA records), ISO-8601 *strings* for dates, explicit `collection` names, `versionKey: false`, no Mongoose timestamps. `autoIndex`/`autoCreate` are off globally (`db/mongoose.ts`) because the owning apps manage indexes — never enable them. (`dmbk-accounts` is written by better-auth's own adapter, not Mongoose.) Both DBs share one connection via `useDb(..., { useCache: true })`. The `dmbk-photos` indexes are this API's to keep now that dmbk no longer runs its `ensureIndexes`. They exist already, so create or change them by hand (Atlas or a one-off script), never through Mongoose:
+  - `photos`: `{ keywords: 1, status: 1, hidden: 1, createdAt: -1, _id: -1 }` for the keyword-filtered listing (multikey prefix, with the keyset sort served from the index), and `{ status: 1, hidden: 1, createdAt: -1, _id: -1 }` for the unfiltered one.
+  - `keywords`: `{ count: -1, _id: 1 }` for the vocabulary order.
 
 **Visibility lives in the repositories, and the per-request loaders in `context.ts` are pre-scoped to the viewer.** Node lookups (`node(id)`) and nested fields load through those loaders, so a record the viewer may not see resolves to `null` — indistinguishable from nonexistent.
 - Photos: public = `status: "ready"` and `hidden: false` (`PUBLIC_SCOPE`); admins (`ADMIN_EMAILS`) see everything. `dmbkPhotos(visibility, states)` with non-default values is *refused* for non-admins, not silently narrowed. `originalKey` is never exposed; URLs are `DO_SPACES_CDN_URL` + derivative key.
