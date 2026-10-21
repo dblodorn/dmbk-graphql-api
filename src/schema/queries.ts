@@ -2,7 +2,7 @@ import { builder } from './builder.js';
 import { forbidden } from '../errors.js';
 import { listKeywords, listPhotos, PUBLIC_SCOPE } from '../lib/photos/repository.js';
 import { listPublicTrainings } from '../lib/lora/repository.js';
-import { SoundSnapshotModel, type SoundSnapshotDoc } from '../models/photos.js';
+import { SoundSnapshotModel, type SoundSnapshotDoc } from '../models/sound.js';
 import { toConnection } from './connection.js';
 import { KeywordRef, PhotoRef, PhotoStatusEnum, VisibilityEnum } from './types/photo.js';
 import { LoraTrainingRef } from './types/lora.js';
@@ -64,7 +64,7 @@ builder.queryField('loraTrainerTrainings', (t) =>
   }),
 );
 
-builder.queryField('dmbkPhotosSoundPlaylists', (t) =>
+builder.queryField('dmbkSoundPlaylists', (t) =>
   t.field({
     type: SoundSnapshotRef,
     nullable: true,

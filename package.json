@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test:mutations": "tsx --env-file=.env scripts/test-mutations.ts",
     "prepare": "git config core.hooksPath .githooks || true",
-    "backfill:owner-id": "tsx --env-file=.env scripts/backfill-owner-id.ts"
+    "backfill:owner-id": "tsx --env-file=.env scripts/backfill-owner-id.ts",
+    "move:sound-snapshots": "tsx --env-file=.env scripts/move-sound-snapshots.ts"
   },
   "keywords": [],
   "author": "",

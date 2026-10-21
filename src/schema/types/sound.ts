@@ -1,5 +1,5 @@
 import { builder } from '../builder.js';
-import type { SoundPlaylist, SoundSnapshotDoc, SoundTrack, SoundUser } from '../../models/photos.js';
+import type { SoundPlaylist, SoundSnapshotDoc, SoundTrack, SoundUser } from '../../models/sound.js';
 
 /*
  * A cached SoundCloud snapshot, stored verbatim in snake_case. Exposed here in
