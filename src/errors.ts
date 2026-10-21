@@ -4,6 +4,7 @@ import { PhotoNotFoundError } from './lib/photos/repository.js';
 import { ForbiddenError, LoraNotFoundError } from './lib/lora/repository.js';
 import { AuthError } from './auth/viewer.js';
 import { StorageCleanupError } from './lib/photos/upload.js';
+import { ArenaNotFoundError, ArenaRateLimitedError, ArenaUpstreamError } from './lib/arena/client.js';
 
 /**
  * Domain errors a caller can act on, mapped to GraphQL error codes in one
@@ -17,6 +18,9 @@ const CODES: [new (...args: never[]) => Error, string][] = [
   [ForbiddenError, 'FORBIDDEN'],
   [AuthError, 'UNAUTHENTICATED'],
   [StorageCleanupError, 'STORAGE_CLEANUP_FAILED'],
+  [ArenaNotFoundError, 'NOT_FOUND'],
+  [ArenaRateLimitedError, 'RATE_LIMITED'],
+  [ArenaUpstreamError, 'UPSTREAM_ERROR'],
 ];
 
 export function forbidden(message: string): GraphQLError {

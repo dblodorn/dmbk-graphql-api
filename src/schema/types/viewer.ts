@@ -4,6 +4,8 @@ import { listOwnImages, listOwnTrainings } from '../../lib/lora/repository.js';
 import { toConnection } from '../connection.js';
 import { VisibilityEnum } from './photo.js';
 import { GeneratedImageRef, LoraTrainingRef } from './lora.js';
+import { ArenaProfileRef } from './arena.js';
+import { getArenaProfile } from '../../lib/arena/profile.js';
 
 export const ViewerRef = builder.objectRef<Viewer>('Viewer').implement({
   description: 'The signed-in account.',
@@ -24,6 +26,12 @@ export const ViewerRef = builder.objectRef<Viewer>('Viewer').implement({
       description: 'Images this account generated.',
       args: { visibility: t.arg({ type: VisibilityEnum, defaultValue: 'any' }) },
       resolve: async (viewer, args) => toConnection(await listOwnImages(viewer, args.visibility ?? 'any', args)),
+    }),
+    arena: t.field({
+      type: ArenaProfileRef,
+      nullable: true,
+      description: 'The Are.na user saved with `arenaSetUser`, or null.',
+      resolve: (viewer) => getArenaProfile(viewer.id),
     }),
   }),
 });

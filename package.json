@@ -28,7 +28,8 @@
     "graphql-yoga": "^5.24.6",
     "mongoose": "^9.11.0",
     "sharp": "^0.35.5",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

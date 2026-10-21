@@ -109,7 +109,7 @@ pm2 start ecosystem.config.cjs
 
 The API serves content owned by two other apps on the same Atlas cluster: the photo library and keyword vocabulary from `dmbk-photos` and the SoundCloud snapshot from `dmbk-sound` (both [dmbk](https://github.com/dblodorn/dmbk)), and LoRA trainings and generated images from `lora-trainer` ([lora-trainer](https://github.com/dblodorn/lora-trainer)).
 
-Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…`, `dmbkSound…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `dmbkSoundPlaylists`, `loraTrainerSetImageHidden`). Auth and Relay fields (`viewer`, `node`, `signInWithGoogle`, `signOut`) have no prefix.
+Fields that read or write one of those databases are prefixed with its name in camelCase: `dmbkPhotos…`, `dmbkSound…` or `loraTrainer…` (e.g. `dmbkPhotosKeywords`, `dmbkSoundPlaylists`, `loraTrainerSetImageHidden`). Are.na fields, which read [Are.na](https://www.are.na)'s public API rather than a database, are prefixed `arena…`. Auth and Relay fields (`viewer`, `node`, `signInWithGoogle`, `signOut`) have no prefix.
 
 ### Queries
 
@@ -121,7 +121,8 @@ Fields that read or write one of those databases are prefixed with its name in c
 | `dmbkPhotosKeywords` | none | Photo keyword vocabulary with counts. |
 | `loraTrainerTrainings` | none | Completed, visible LoRA trainings; each has an `images` connection. |
 | `dmbkSoundPlaylists` | none | Latest cached SoundCloud playlists. |
-| `viewer` | session | The signed-in account (`id`, `email`, `name`, `isAdmin`), with its own `loraTrainerTrainings` and `loraTrainerImages` (including hidden). |
+| `viewer` | session | The signed-in account (`id`, `email`, `name`, `isAdmin`), with its own `loraTrainerTrainings` and `loraTrainerImages` (including hidden), and `arena`: its saved Are.na user and their channels. |
+| `arenaChannel` | none | A public or closed Are.na channel by slug, with an `images` connection; null when private or missing. |
 
 ### Mutations
 
@@ -136,6 +137,8 @@ Fields that read or write one of those databases are prefixed with its name in c
 | `dmbkPhotosDeletePhoto` | admin | Relay | Delete a photo, its keyword counts and its stored files. Returns `deletedPhotoId` (for `@deleteRecord`); `STORAGE_CLEANUP_FAILED` if the record went but the files didn't. |
 | `loraTrainerSetTrainingHidden` | owner | Relay | Hide or unhide one of your LoRA trainings. |
 | `loraTrainerSetImageHidden` | owner | Relay | Hide or unhide an image you generated. |
+| `arenaSetUser` | session | Relay | Save your Are.na username (checked on Are.na; `NOT_FOUND` if unknown). |
+| `arenaClearUser` | session | Standard | Forget your Are.na username. |
 
 Admin = an account whose email is in `ADMIN_EMAILS`. Owner = the account named by the record's `ownerId`.
 
@@ -161,6 +164,20 @@ Then include it in the `Authorization` header:
 ```
 Authorization: Bearer <token>
 ```
+
+### Are.na
+
+`viewer.arena.channels(source: ALL | OWN | GROUPS)` lists the saved Are.na user's channels: the ones they made (group-owned included) and the channels of the groups they belong to, most recently updated first. Only public and closed channels are ever returned: Are.na is read without credentials, so there is no Are.na sign-in and nothing to configure.
+
+```graphql
+mutation { arenaSetUser(input: { slug: "your-are-na-username" }) { viewer { arena { user { name } } } } }
+
+{ viewer { arena { channels(first: 50) { totalCount edges { node { slug title url blockCount owner { name isGroup } } } } } } }
+
+{ arenaChannel(slug: "some-channel") { title images(first: 100) { edges { node { src thumbnailSrc } } pageInfo { hasNextPage endCursor } } } }
+```
+
+### Visibility
 
 Reads are public. Hidden or unfinished records are only visible to admins (photos) or their owners (LoRA records); to everyone else they look nonexistent.
 

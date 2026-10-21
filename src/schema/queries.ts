@@ -8,6 +8,8 @@ import { KeywordRef, PhotoRef, PhotoStatusEnum, VisibilityEnum } from './types/p
 import { LoraTrainingRef } from './types/lora.js';
 import { SoundSnapshotRef } from './types/sound.js';
 import { ViewerRef } from './types/viewer.js';
+import { ArenaChannelRef } from './types/arena.js';
+import { getChannel } from '../lib/arena/client.js';
 
 builder.queryType({});
 
@@ -70,5 +72,15 @@ builder.queryField('dmbkSoundPlaylists', (t) =>
     nullable: true,
     description: 'The latest cached SoundCloud playlists snapshot.',
     resolve: () => SoundSnapshotModel.findById('playlists').lean<SoundSnapshotDoc>().exec(),
+  }),
+);
+
+builder.queryField('arenaChannel', (t) =>
+  t.field({
+    type: ArenaChannelRef,
+    nullable: true,
+    description: 'A public or closed Are.na channel by slug, or null when it is private or does not exist.',
+    args: { slug: t.arg.string({ required: true }) },
+    resolve: (_root, args) => getChannel(args.slug.trim()),
   }),
 );
