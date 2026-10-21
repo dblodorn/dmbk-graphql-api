@@ -71,12 +71,13 @@ Ordered across repos. Every merge to `main` here deploys, so each group is shipp
   - In `fal.ts`, remove `paymentTxHash`, the payment verification and the refunds. In `generate.ts`, remove the rate limit and `remaining`.
   - In `env.ts`, remove the admin wallet, the payment wallet key, the recipient and the QA wallets.
   - Remove the `viem`, `wagmi` and `better-auth` deps, and the env vars on Vercel.
-- [ ] 3.4 `npm run typecheck`, then verify on production: sign in, train a LoRA, generate images, hide or unhide. Re-run the backfill (dry-run, then `--apply` if needed) for records written between 1.13 and this deploy.
+- [x] 3.4 `npm run typecheck`, then verify on production: sign in, train a LoRA, generate images, hide or unhide. Re-run the backfill (dry-run, then `--apply` if needed) for records written between 1.13 and this deploy.
   - [x] lora-trainer PR #28 merged and deployed. Sign-in and hide/unhide verified locally against the production API. Backfill dry-run 2026-10-21: every record has an `ownerId`.
-  - [ ] Train and generate on production.
+  - [x] Train and generate on production (owner's smoke test, 2026-10-21).
 
 ## 4. Cleanup
 
-- [ ] 4.1 Back up the `user`, `session`, `account`, `verification` and `walletAddress` collections in `dmbk-photos` and `lora-trainer` with `mongodump`, then drop them.
-- [ ] 4.2 Remove the old env vars on both Vercel projects.
+- [x] 4.1 Back up the `user`, `session`, `account`, `verification` and `walletAddress` collections in `dmbk-photos` and `lora-trainer` with `mongodump`, then drop them.
+  - Done 2026-10-21. Backed up with `mongodump` to `~/dev/backups/old-siwe-auth-2026-10-21/` on the owner's machine: dmbk-photos user 2, session 14, account 2, verification 0, walletAddress 2; lora-trainer user 1, session 13, account 2, verification 0, walletAddress 2. Counts were checked against the dump, then all 10 collections were dropped.
+- [x] 4.2 Remove the old env vars on both Vercel projects. dmbk on 2026-10-20; lora-trainer's 8 SIWE/payment vars on 2026-10-21. (lora-trainer's `TURSO_*` remain, used only by its finished migration script.)
 - [ ] 4.3 Archive this change.
