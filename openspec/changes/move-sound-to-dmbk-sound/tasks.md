@@ -33,7 +33,8 @@
 
 - [x] 6.1 Run `npm run move:sound-snapshots` (report), then `-- --apply` against production. Verify the `dmbk-sound.sound_snapshots` document is identical to the one recorded in 1.2.
   - Done 2026-10-21. A dmbk build had refreshed the source since 1.2, so the copied document is `fetchedAt 2026-10-21T16:31:37.260Z`, `schemaVersion 1`, 14 playlists, deep-equal to the source. A re-run reports nothing to do.
-- [ ] 6.2 Merge and deploy the dmbk PR, then trigger a production build. Verify `fetchedAt` in `dmbk-sound` advanced past the 1.2 value and `/sound` lists Recordings.
+- [x] 6.2 Merge and deploy the dmbk PR, then trigger a production build. Verify `fetchedAt` in `dmbk-sound` advanced past the 1.2 value and `/sound` lists Recordings.
+  - Done 2026-10-21. dmbk #36 merged at 16:39Z (Vercel success). The `dmbk-sound` snapshot advanced to `16:45:08.158Z`, `dmbk-photos` stayed at `16:31:37.260Z`, and https://dmbk.io/sound renders Recordings.
 - [ ] 6.3 Merge this repo's PR to `main` (auto-deploys). Verify on `https://graphql.dmbk.network/graphql` that `{ dmbkSoundPlaylists { fetchedAt } }` returns the value from 6.2 and `dmbkPhotosSoundPlaylists` fails validation.
 - [ ] 6.4 Re-run `-- --apply` (catches a build that wrote to the old location between 6.1 and 6.2, and must report "target is newer, nothing to do"), then `-- --drop-source`. Verify `dmbk-photos` lists no `sound_snapshots` collection.
 - [ ] 6.5 A day or more later, after any old dmbk preview builds have aged out, confirm `dmbk-photos.sound_snapshots` hasn't been recreated. Drop it again if it has, then tick the roadmap line.
