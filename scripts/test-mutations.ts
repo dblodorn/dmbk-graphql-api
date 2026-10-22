@@ -37,6 +37,15 @@
  *   server against it to include the suite — `ARENA_API_URL=http://localhost:4099
  *   npm run dev` — otherwise it is skipped. The test accounts' `arena_profiles`
  *   are deleted with them.
+ * - API access: every request carries a `test-mutations` API key, inserted into
+ *   `dmbk-accounts.api_clients` at the start and deleted at the end (with a
+ *   revoked one for the refusal check). The playground suite needs the server
+ *   started with `API_KEYS_ENFORCED=true`, otherwise it is skipped. Its keyless
+ *   requests each claim their own `X-Forwarded-For` address, which a loopback
+ *   server trusts, so the rate-limit check exhausts one address's budget
+ *   without starving the others.
+ *
+ * The full run: `API_KEYS_ENFORCED=true ARENA_API_URL=http://localhost:4099 npm run dev`.
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -55,6 +64,12 @@ const MEMBER_EMAIL = 'graphql-api-test-member@example.invalid';
 /** Has a user and a session but is not on ALLOWED_EMAILS: a removed account. */
 const DELISTED_EMAIL = 'graphql-api-test-delisted@example.invalid';
 const TEST_EMAILS = [ADMIN_EMAIL, MEMBER_EMAIL, DELISTED_EMAIL];
+
+/** API clients this script issues keys to; their keys are deleted, not just revoked, afterwards. */
+const KEY_CLIENT = 'test-mutations';
+const REVOKED_KEY_CLIENT = 'test-mutations-revoked';
+/** Sent on every request unless a call opts out. Set once the key is issued. */
+let apiKey: string | undefined;
 
 // ---------------------------------------------------------------------------
 // Setup / cleanup modes
@@ -163,6 +178,11 @@ async function deleteUploadFixtures(): Promise<number> {
   return fixtures.length;
 }
 
+async function deleteTestKeys(): Promise<number> {
+  const { deleteKeys } = await import('../src/lib/api-keys/store.js');
+  return (await deleteKeys(KEY_CLIENT)) + (await deleteKeys(REVOKED_KEY_CLIENT));
+}
+
 async function cleanup(): Promise<void> {
   // Only documents this script creates: marked fixtures, and the .invalid test accounts.
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
@@ -170,9 +190,10 @@ async function cleanup(): Promise<void> {
     const trainings = await LoraTrainingModel.deleteMany({ triggerWord: FIXTURE_TRIGGER, requestId: /^test-/ });
     const photos = await deleteUploadFixtures();
     const accounts = await deleteAccounts();
+    const keys = await deleteTestKeys();
     console.log(
       `Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s), ` +
-        `${photos} upload fixture photo(s), ${accounts} test account(s).`,
+        `${photos} upload fixture photo(s), ${accounts} test account(s), ${keys} test API key(s).`,
     );
   });
 }
@@ -185,17 +206,39 @@ interface GqlError {
   extensions?: { code?: string };
 }
 
+interface RequestOptions {
+  /** The API key to send; null sends none. Defaults to the run's key. */
+  key?: string | null;
+  /** Claimed client address, trusted by a server on loopback. */
+  ip?: string;
+}
+
+async function request<T = any>(
+  query: string,
+  variables: Record<string, unknown> = {},
+  token?: string,
+  { key = apiKey, ip }: RequestOptions = {},
+): Promise<{ status: number; headers: Headers; body: { data: T | null; errors?: GqlError[] } }> {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(key ? { 'x-api-key': key } : {}),
+      ...(ip ? { 'x-forwarded-for': ip } : {}),
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  return { status: res.status, headers: res.headers, body: (await res.json()) as { data: T | null; errors?: GqlError[] } };
+}
+
 async function gql<T = any>(
   query: string,
   variables: Record<string, unknown> = {},
   token?: string,
+  options?: RequestOptions,
 ): Promise<{ data: T | null; errors?: GqlError[] }> {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ query, variables }),
-  });
-  return res.json() as Promise<{ data: T | null; errors?: GqlError[] }>;
+  return (await request<T>(query, variables, token, options)).body;
 }
 
 /** Data, or throw on any GraphQL error. */
@@ -558,6 +601,88 @@ async function authSuite(accounts: Record<string, TestAccount>): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// API access: keys and the keyless playground
+
+/** A fresh documentation-range address per check, so each starts with a full budget. */
+let ipCounter = 0;
+const freshIp = () => `198.51.100.${++ipCounter}`;
+
+const codesOf = (errors?: GqlError[]) => (errors ?? []).map((e) => e.extensions?.code);
+
+async function apiAccessSuite(accounts: Record<string, TestAccount>, revokedKey: string): Promise<void> {
+  console.log('\nAPI access');
+  const admin = accounts[ADMIN_EMAIL];
+
+  const unknown = await request('{ _health }', {}, undefined, { key: 'dmbk_not-a-real-key' });
+  const revoked = await request('{ _health }', {}, undefined, { key: revokedKey });
+  const garbage = await request('{ _health }', {}, undefined, { key: 'garbage' });
+  check('unknown key → 401 UNAUTHENTICATED', unknown.status === 401 && codesOf(unknown.body.errors)[0] === 'UNAUTHENTICATED', unknown.body);
+  check('revoked key → 401 UNAUTHENTICATED', revoked.status === 401 && codesOf(revoked.body.errors)[0] === 'UNAUTHENTICATED', revoked.body);
+  check(
+    'unknown, revoked and malformed keys get the same message',
+    new Set([unknown, revoked, garbage].map((r) => r.body.errors?.[0]?.message)).size === 1,
+  );
+  check('a refused key runs nothing', unknown.body.data == null && revoked.body.data == null);
+
+  // Is the server enforcing? A keyless mutation runs only when it isn't.
+  const probe = await gql('mutation { signOut }', {}, undefined, { key: null, ip: freshIp() });
+  if (!codesOf(probe.errors).includes('FORBIDDEN')) {
+    console.log('  - playground skipped: the server isn\'t enforcing keys (start it with API_KEYS_ENFORCED=true)');
+    return;
+  }
+
+  const keyless = (query: string, token?: string, variables: Record<string, unknown> = {}) =>
+    gql(query, variables, token, { key: null, ip: freshIp() });
+
+  const read = await keyless('{ dmbkPhotos(first: 1) { edges { node { id } } } }');
+  check('keyless public read works', !read.errors && Array.isArray(read.data?.dmbkPhotos?.edges), read);
+
+  const intro = await keyless('{ __schema { queryType { name } types { name fields { name type { name ofType { name ofType { name ofType { name } } } } } } } }');
+  check('keyless introspection works', intro.data?.__schema?.queryType?.name === 'Query', intro.errors);
+
+  const asAdmin = await keyless(VIEWER, admin.token);
+  check('keyless request ignores a valid admin session', !asAdmin.errors && asAdmin.data?.viewer === null, asAdmin);
+  const adminList = await keyless('{ dmbkPhotos(first: 1, visibility: HIDDEN) { edges { node { id } } } }', admin.token);
+  check('keyless admin token gets no admin listing', codesOf(adminList.errors).includes('FORBIDDEN'), adminList);
+  check('the same session with a key is admin', (await ok(VIEWER, {}, admin.token)).viewer?.isAdmin === true);
+
+  const signIn = await keyless('mutation($input: SignInWithGoogleInput!) { signInWithGoogle(input: $input) { token } }', undefined, {
+    input: { idToken: 'not-a-google-id-token' },
+  });
+  check('keyless signInWithGoogle → FORBIDDEN', codesOf(signIn.errors).includes('FORBIDDEN') && signIn.data == null, signIn);
+
+  // Valid at every level (training → images → training …), so only the depth rule can refuse it.
+  const DEEP = `query($id: ID!) { node(id: $id) { ... on LoraTraining { images(first: 1) { edges { node { training {
+    images(first: 1) { edges { node { training { images(first: 1) { edges { node { id } } } } } } } } } } } } } }`;
+  const deepId = globalId('LoraTraining', 'does-not-exist');
+  const deepKeyed = await gql(DEEP, { id: deepId });
+  check('deep query runs with a key', !deepKeyed.errors, deepKeyed.errors);
+  const deep = await keyless(DEEP, undefined, { id: deepId });
+  check('the same deep query without a key → BAD_USER_INPUT', codesOf(deep.errors).includes('BAD_USER_INPUT') && deep.data == null, deep);
+  check('…and still runs with a key afterwards', !(await gql(DEEP, { id: deepId })).errors);
+
+  const aliases = await keyless(`{ ${Array.from({ length: 20 }, (_, i) => `a${i}: _health`).join(' ')} }`);
+  check('20 aliased root fields without a key → BAD_USER_INPUT', codesOf(aliases.errors).includes('BAD_USER_INPUT'), aliases);
+
+  // Rate limit: one address until it is refused; the default budget is 30 a minute.
+  const ip = freshIp();
+  let limited: Awaited<ReturnType<typeof request>> | undefined;
+  for (let i = 0; i < 500 && !limited; i++) {
+    const r = await request('{ _health }', {}, undefined, { key: null, ip });
+    if (r.status === 429) limited = r;
+  }
+  check(
+    'an address over its budget → 429 RATE_LIMITED with Retry-After',
+    !!limited && codesOf(limited.body.errors)[0] === 'RATE_LIMITED' && Number(limited.headers.get('retry-after')) > 0,
+    limited?.body ?? 'never limited in 500 requests',
+  );
+  const other = await request('{ _health }', {}, undefined, { key: null, ip: freshIp() });
+  check('another address is unaffected', other.status === 200, other.body);
+  const keyed = await request('{ _health }', {}, undefined, { ip });
+  check('a keyed request from the limited address runs', keyed.status === 200, keyed.body);
+}
+
+// ---------------------------------------------------------------------------
 // Are.na, against a stub
 
 const ARENA_STUB_PORT = Number(process.env.ARENA_STUB_PORT ?? 4099);
@@ -671,7 +796,11 @@ async function main(): Promise<void> {
   if (process.argv.includes('--admin-token')) {
     try {
       const admin = (await createAccounts([ADMIN_EMAIL]))[ADMIN_EMAIL];
-      if (!(await ok(VIEWER, {}, admin.token)).viewer?.isAdmin) {
+      // A key only for this one check, so it works against an enforcing server too.
+      const { createKey } = await import('../src/lib/api-keys/store.js');
+      apiKey = (await createKey(KEY_CLIENT)).key;
+      const isAdmin = (await ok(VIEWER, {}, admin.token).finally(deleteTestKeys)).viewer?.isAdmin;
+      if (!isAdmin) {
         throw new Error(`${ADMIN_EMAIL} is not an admin on ${API_URL}. Run --setup and restart the local server.`);
       }
       process.stdout.write(`${admin.token}\n`);
@@ -683,9 +812,16 @@ async function main(): Promise<void> {
 
   console.log(`API ${API_URL}`);
   let accounts: Record<string, TestAccount>;
+  let revokedKey: string;
   try {
+    const { createKey, revokeKeys } = await import('../src/lib/api-keys/store.js');
+    await deleteTestKeys();
+    apiKey = (await createKey(KEY_CLIENT)).key;
+    revokedKey = (await createKey(REVOKED_KEY_CLIENT)).key;
+    await revokeKeys(REVOKED_KEY_CLIENT);
     accounts = await createAccounts();
   } catch (e) {
+    await deleteTestKeys().catch(() => undefined);
     await mongoose.disconnect();
     throw e;
   }
@@ -696,6 +832,7 @@ async function main(): Promise<void> {
       throw new Error(`${ADMIN_EMAIL} is not an admin on ${API_URL}. Run --setup and restart the local server.`);
     }
     await authSuite(accounts);
+    await apiAccessSuite(accounts, revokedKey);
     await photoSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await loraSuite(admin.id, admin.token, accounts[MEMBER_EMAIL].token);
     await uploadSuite(admin.token, accounts[MEMBER_EMAIL].token);
@@ -707,6 +844,7 @@ async function main(): Promise<void> {
     }
   } finally {
     await deleteAccounts().catch((e) => console.error('  ! test account cleanup failed (run --cleanup):', e));
+    await deleteTestKeys().catch((e) => console.error('  ! test API key cleanup failed (run --cleanup):', e));
     await mongoose.disconnect();
   }
 
