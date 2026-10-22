@@ -64,16 +64,16 @@
 
 - [x] 6.1 Before deploying, run `ss -ltnp` on the droplet and confirm nothing besides Caddy and loopback reaches `:4000`. Merge to `main` with `API_KEYS_ENFORCED` unset. Verify: the deploy job passes, the GraphQL endpoint answers through Caddy, and `curl http://<droplet-ip>:4000/graphql` is refused.
 - [x] 6.2 Issue production keys (`npm run api-client -- create dmbk-photo`, then `lora-trainer`, then `dmbk`) and set `DMBK_GRAPHQL_API_KEY` in each Vercel project (Production, Preview, Development). Verify: `npm run api-client -- list` shows three active clients with no `lastUsedAt` yet.
-- [ ] 6.3 dmbk-photo:
+- [x] 6.3 dmbk-photo:
   - send `x-api-key` from `src/server/auth/session.ts` `callApi` and from the server path of `lib/dmbk-api.ts`;
   - add a same-origin `GET /api/photos` read route and point `usePhotoPages` and `gallery-api.ts` at it;
   - fail loudly in production when the key is missing.
 
   Verify: the gallery paginates and filters in the browser with no request to graphql.dmbk.network in the network tab, and the admin still works.
-- [ ] 6.4 lora-trainer: send `x-api-key` from `src/server/auth/session.ts` and fail loudly when it's missing. Verify: sign-in, trainings and images work on a preview deploy, and its `lastUsedAt` updates.
-- [ ] 6.5 dmbk: send `x-api-key` from the `/sound` fallback request and fail loudly when it's missing. Verify: `/sound` renders from the API fallback, and `dmbk`'s `lastUsedAt` updates.
-- [ ] 6.6 Watch `pm2 logs graphql-api | grep '\[api-access\] keyless'` for at least a day after the client deploys. Verify: only expected keyless traffic remains (health check, deliberate GraphiQL use).
-- [ ] 6.7 Set `API_KEYS_ENFORCED=true` in the droplet `.env` and run `pm2 restart graphql-api --update-env`. Verify:
+- [x] 6.4 lora-trainer: send `x-api-key` from `src/server/auth/session.ts` and fail loudly when it's missing. Verify: sign-in, trainings and images work on a preview deploy, and its `lastUsedAt` updates.
+- [x] 6.5 dmbk: send `x-api-key` from the `/sound` fallback request and fail loudly when it's missing. Verify: `/sound` renders from the API fallback, and `dmbk`'s `lastUsedAt` updates.
+- [x] 6.6 Watch `pm2 logs graphql-api | grep '\[api-access\] keyless'` for at least a day after the client deploys. Verify: only expected keyless traffic remains (health check, deliberate GraphiQL use).
+- [x] 6.7 Set `API_KEYS_ENFORCED=true` in the droplet `.env` and run `pm2 restart graphql-api --update-env`. Verify:
   - all three apps work in production;
   - a keyless mutation from curl gets `FORBIDDEN`;
   - a burst of 31 keyless requests gets a 429.
