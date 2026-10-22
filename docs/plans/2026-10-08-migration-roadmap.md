@@ -143,11 +143,11 @@ Every client app sends its own `X-API-Key`; requests without one become the rate
 
 - [x] Deploy the API with `API_KEYS_ENFORCED` unset, after `ss -ltnp` on the droplet confirms nothing but Caddy needs `:4000` from outside (production now binds to `127.0.0.1`).
 - [x] Issue production keys (`npm run api-client -- create <client>`) and set `DMBK_GRAPHQL_API_KEY` in each Vercel project.
-- [ ] dmbk-photo sends its key from the server, and its gallery's browser reads go through a same-origin `/api/photos` route.
-- [ ] lora-trainer sends its key.
-- [ ] dmbk sends its key from the `/sound` fallback.
-- [ ] `[api-access] keyless request` in `pm2 logs` shows only expected callers for a day.
-- [ ] Set `API_KEYS_ENFORCED=true` in the droplet's `.env` and `pm2 restart graphql-api --update-env`.
+- [x] dmbk-photo sends its key from the server, and its gallery's browser reads go through a same-origin `/api/photos` route.
+- [x] lora-trainer sends its key.
+- [x] dmbk sends its key from the `/sound` fallback.
+- [x] `[api-access] keyless request` in `pm2 logs` shows only expected callers for a day.
+- [x] Set `API_KEYS_ENFORCED=true` in the droplet's `.env` and `pm2 restart graphql-api --update-env`.
 
 ---
 
