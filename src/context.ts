@@ -10,6 +10,8 @@ export interface ContextType {
   /** The incoming request; `signOut` needs its bearer token. */
   request: Request;
   viewer: Viewer | null;
+  /** The client app named by the request's API key; null for keyless requests. For logs. */
+  client: string | null;
   /**
    * Per-request loaders, already scoped to what this viewer may see: a record
    * outside the viewer's visibility loads as null. Node lookups and nested
@@ -20,11 +22,12 @@ export interface ContextType {
   imageLoader: DataLoader<string, GeneratedImageDoc | null>;
 }
 
-export function createContext(request: Request, viewer: Viewer | null): ContextType {
+export function createContext(request: Request, viewer: Viewer | null, client: string | null = null): ContextType {
   const photoScope = viewer?.isAdmin ? ADMIN_SCOPE : PUBLIC_SCOPE;
   return {
     request,
     viewer,
+    client,
     photoLoader: new DataLoader((ids) => loadPhotos(ids, photoScope)),
     trainingLoader: new DataLoader((ids) => loadTrainings(ids, viewer)),
     imageLoader: new DataLoader((ids) => loadImages(ids, viewer)),

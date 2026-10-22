@@ -31,11 +31,41 @@ function hostPatterns(name: string): string[] {
   return patterns;
 }
 
+function positiveInt(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    console.error(`${name} must be a positive integer, got "${raw}"`);
+    process.exit(1);
+  }
+  return value;
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 export const env = {
   isProduction,
   port: parseInt(process.env.PORT || '4000', 10),
+  /**
+   * Loopback in production: Caddy is the only way in, so `X-Forwarded-For`
+   * can't be forged by calling the port directly (`lib/api-access/client-ip.ts`).
+   */
+  host: process.env.HOST?.trim() || (isProduction ? '127.0.0.1' : '0.0.0.0'),
+
+  /**
+   * API access (`lib/api-access/`). Off: keyless requests behave as before and
+   * are logged. On: they are the rate-limited, read-only playground. A bad
+   * `X-API-Key` is refused either way.
+   */
+  apiKeysEnforced: process.env.API_KEYS_ENFORCED?.trim() === 'true',
+  playground: {
+    /** Requests per IP per window, refilled evenly across it. */
+    rateLimit: positiveInt('PLAYGROUND_RATE_LIMIT', 30),
+    rateWindowSeconds: positiveInt('PLAYGROUND_RATE_WINDOW_SECONDS', 60),
+    maxDepth: positiveInt('PLAYGROUND_MAX_DEPTH', 10),
+    maxRootFields: positiveInt('PLAYGROUND_MAX_ROOT_FIELDS', 5),
+  },
 
   mongoUri: required('MONGODB_URI'),
   /** Owned by the dmbk app. This API reads it and performs curation writes. */

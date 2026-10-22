@@ -137,6 +137,18 @@ Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/li
 - [x] This API reads `dmbk-sound` (deployed 2026-10-21, #15).
 - [ ] `npm run move:sound-snapshots -- --drop-source` drops `dmbk-photos.sound_snapshots` (dropped 2026-10-21), and a later check confirms no old dmbk build has recreated it.
 
+## Client API keys
+
+Every client app sends its own `X-API-Key`; requests without one become the rate-limited, read-only playground once `API_KEYS_ENFORCED=true`. OpenSpec change: `lock-api-to-clients` (its tasks, section 6, carry the verification for each step).
+
+- [ ] Deploy the API with `API_KEYS_ENFORCED` unset, after `ss -ltnp` on the droplet confirms nothing but Caddy needs `:4000` from outside (production now binds to `127.0.0.1`).
+- [ ] Issue production keys (`npm run api-client -- create <client>`) and set `DMBK_GRAPHQL_API_KEY` in each Vercel project.
+- [ ] dmbk-photo sends its key from the server, and its gallery's browser reads go through a same-origin `/api/photos` route.
+- [ ] lora-trainer sends its key.
+- [ ] dmbk sends its key from the `/sound` fallback.
+- [ ] `[api-access] keyless request` in `pm2 logs` shows only expected callers for a day.
+- [ ] Set `API_KEYS_ENFORCED=true` in the droplet's `.env` and `pm2 restart graphql-api --update-env`.
+
 ---
 
 ## Open questions
