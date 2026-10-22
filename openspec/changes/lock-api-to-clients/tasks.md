@@ -62,8 +62,8 @@
 
 ## 6. Rollout (API repo + clients)
 
-- [ ] 6.1 Before deploying, run `ss -ltnp` on the droplet and confirm nothing besides Caddy and loopback reaches `:4000`. Merge to `main` with `API_KEYS_ENFORCED` unset. Verify: the deploy job passes, the GraphQL endpoint answers through Caddy, and `curl http://<droplet-ip>:4000/graphql` is refused.
-- [ ] 6.2 Issue production keys (`npm run api-client -- create dmbk-photo`, then `lora-trainer`, then `dmbk`) and set `DMBK_GRAPHQL_API_KEY` in each Vercel project (Production, Preview, Development). Verify: `npm run api-client -- list` shows three active clients with no `lastUsedAt` yet.
+- [x] 6.1 Before deploying, run `ss -ltnp` on the droplet and confirm nothing besides Caddy and loopback reaches `:4000`. Merge to `main` with `API_KEYS_ENFORCED` unset. Verify: the deploy job passes, the GraphQL endpoint answers through Caddy, and `curl http://<droplet-ip>:4000/graphql` is refused.
+- [x] 6.2 Issue production keys (`npm run api-client -- create dmbk-photo`, then `lora-trainer`, then `dmbk`) and set `DMBK_GRAPHQL_API_KEY` in each Vercel project (Production, Preview, Development). Verify: `npm run api-client -- list` shows three active clients with no `lastUsedAt` yet.
 - [ ] 6.3 dmbk-photo:
   - send `x-api-key` from `src/server/auth/session.ts` `callApi` and from the server path of `lib/dmbk-api.ts`;
   - add a same-origin `GET /api/photos` read route and point `usePhotoPages` and `gallery-api.ts` at it;
