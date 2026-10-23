@@ -79,3 +79,12 @@ builder.node(GeneratedImageRef, {
     hidden: t.boolean({ ...ownerOnly, description: 'Owner only.', resolve: (img) => img.hidden === true }),
   }),
 });
+
+export const LoraTrainerSlideshowImageRef = builder
+  .objectRef<{ url: string }>('LoraTrainerSlideshowImage')
+  .implement({
+    description: 'An image for the public slideshow. An object, so it can grow.',
+    fields: (t) => ({
+      url: t.exposeString('url', { description: 'The DO Spaces copy when there is one.' }),
+    }),
+  });
