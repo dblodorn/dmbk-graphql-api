@@ -1,11 +1,11 @@
 import { builder } from './builder.js';
 import { forbidden } from '../errors.js';
 import { listKeywords, listPhotos, PUBLIC_SCOPE } from '../lib/photos/repository.js';
-import { listPublicTrainings } from '../lib/lora/repository.js';
+import { listPublicTrainings, slideshowImages } from '../lib/lora/repository.js';
 import { SoundSnapshotModel, type SoundSnapshotDoc } from '../models/sound.js';
 import { toConnection } from './connection.js';
 import { KeywordRef, PhotoRef, PhotoStatusEnum, VisibilityEnum } from './types/photo.js';
-import { LoraTrainingRef } from './types/lora.js';
+import { LoraTrainerSlideshowImageRef, LoraTrainingRef } from './types/lora.js';
 import { SoundSnapshotRef } from './types/sound.js';
 import { ViewerRef } from './types/viewer.js';
 import { ArenaChannelRef } from './types/arena.js';
@@ -63,6 +63,16 @@ builder.queryField('loraTrainerTrainings', (t) =>
     type: LoraTrainingRef,
     description: 'Completed, visible LoRA trainings, newest first.',
     resolve: async (_root, args) => toConnection(await listPublicTrainings(args)),
+  }),
+);
+
+builder.queryField('loraTrainerSlideshowImages', (t) =>
+  t.field({
+    type: [LoraTrainerSlideshowImageRef],
+    description:
+      'Up to `count` (1–20) distinct images in random order, from visible generated images and visible, completed trainings.',
+    args: { count: t.arg.int({ required: true, defaultValue: 10 }) },
+    resolve: (_root, args) => slideshowImages(args.count),
   }),
 );
 

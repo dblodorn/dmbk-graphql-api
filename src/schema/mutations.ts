@@ -4,7 +4,14 @@ import { setPhotoHidden, updatePhoto } from '../lib/photos/repository.js';
 import { deletePhotoWithFiles, finalizePhoto, reservePhotoUpload } from '../lib/photos/upload.js';
 import { cursorFor } from '../lib/cursor.js';
 import type { PhotoDoc } from '../models/photos.js';
-import { setImageHidden, setTrainingHidden } from '../lib/lora/repository.js';
+import {
+  completeTraining,
+  createTraining,
+  recordImages,
+  setImageHidden,
+  setTrainingAssets,
+  setTrainingHidden,
+} from '../lib/lora/repository.js';
 import { PhotoRef } from './types/photo.js';
 import { GeneratedImageRef, LoraTrainingRef } from './types/lora.js';
 import { ViewerRef } from './types/viewer.js';
@@ -235,6 +242,129 @@ builder.relayMutationField(
   {
     outputFields: (t) => ({
       generatedImage: t.field({ type: GeneratedImageRef, resolve: (payload) => payload.generatedImage }),
+    }),
+  },
+);
+
+// ---------------------------------------------------------------------------
+// LoRA records (signed in). lora-trainer runs the fal.ai work and the Spaces
+// mirroring; these record what it produced. URL rules: lib/lora/urls.ts.
+
+builder.relayMutationField(
+  'loraTrainerCreateTraining',
+  {
+    inputFields: (t) => ({
+      requestId: t.string({ required: true, description: 'The fal.ai queue request id. One training per request.' }),
+      triggerWord: t.string({ required: true, description: '1–50 characters.' }),
+      steps: t.int({ required: true, description: '100–2000.' }),
+      imageUrls: t.stringList({ required: true, description: '1–20 https source image URLs.' }),
+      arenaChannelUrl: t.string(),
+      arenaChannelTitle: t.string({ description: 'Up to 200 characters.' }),
+    }),
+  },
+  {
+    authScopes: { signedIn: true },
+    resolve: async (_root, { input }, context) => ({
+      loraTraining: await createTraining(context.viewer!, input),
+    }),
+  },
+  {
+    outputFields: (t) => ({
+      loraTraining: t.field({ type: LoraTrainingRef, resolve: (payload) => payload.loraTraining }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'loraTrainerSetTrainingAssets',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: LoraTrainingRef }),
+      trainingZipUrl: t.string({ description: 'Spaces CDN, under lora-trainer/. Omit to leave unchanged.' }),
+      imageUrlsSpaces: t.stringList({
+        description: 'Spaces mirrors of the source images, under lora-trainer/. Omit to leave unchanged.',
+      }),
+    }),
+  },
+  {
+    authScopes: { signedIn: true },
+    resolve: async (_root, { input }, context) => ({
+      loraTraining: await setTrainingAssets(context.viewer!, input.id.id, input),
+    }),
+  },
+  {
+    outputFields: (t) => ({
+      loraTraining: t.field({ type: LoraTrainingRef, resolve: (payload) => payload.loraTraining }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'loraTrainerCompleteTraining',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: LoraTrainingRef }),
+      loraWeightsUrl: t.string({ required: true }),
+      imageUrlsSpaces: t.stringList({ description: 'Backfilled source mirrors, under lora-trainer/. Replaces the stored ones.' }),
+    }),
+  },
+  {
+    authScopes: { signedIn: true },
+    description: 'Mark a training completed. Already completed: changes nothing.',
+    resolve: async (_root, { input }, context) => ({
+      loraTraining: await completeTraining(context.viewer!, input.id.id, input),
+    }),
+  },
+  {
+    outputFields: (t) => ({
+      loraTraining: t.field({ type: LoraTrainingRef, resolve: (payload) => payload.loraTraining }),
+    }),
+  },
+);
+
+const RecordImageInput = builder.inputType('LoraTrainerRecordImagesImageInput', {
+  fields: (t) => ({
+    id: t.string({
+      required: true,
+      description: "32 lowercase hex characters, chosen by the client (it keys the image's Spaces copy).",
+    }),
+    prompt: t.string({ required: true, description: '1–1000 characters.' }),
+    imageUrl: t.string({ required: true, description: 'The fal.ai URL.' }),
+    cdnUrl: t.string({ description: 'The Spaces copy, under lora-trainer/.' }),
+    imageWidth: t.int(),
+    imageHeight: t.int(),
+    seed: t.string(),
+    loraScaleValue: t.string(),
+    loraScaleName: t.string(),
+    genWidth: t.int({ description: 'The size requested from fal.ai.' }),
+    genHeight: t.int(),
+  }),
+});
+
+builder.relayMutationField(
+  'loraTrainerRecordImages',
+  {
+    inputFields: (t) => ({
+      loraTrainingId: t.globalID({ required: true, for: LoraTrainingRef }),
+      images: t.field({ type: [RecordImageInput], required: true, description: '1–8 images.' }),
+    }),
+  },
+  {
+    authScopes: { signedIn: true },
+    description: 'Record images generated with one completed LoRA, all or nothing.',
+    resolve: async (_root, { input }, context) => {
+      const { training, images } = await recordImages(context.viewer!, input.loraTrainingId.id, input.images);
+      return { loraTraining: training, generatedImages: images };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      loraTraining: t.field({ type: LoraTrainingRef, resolve: (payload) => payload.loraTraining }),
+      generatedImages: t.field({
+        type: [GeneratedImageRef],
+        description: 'In input order.',
+        resolve: (payload) => payload.generatedImages,
+      }),
     }),
   },
 );
