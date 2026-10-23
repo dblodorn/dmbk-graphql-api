@@ -4,8 +4,8 @@
 
 - [x] 1.1 Confirm the `lora-trainer` indexes listed in design "Context" exist on Atlas (`db.lora_trainings.getIndexes()`, `db.generated_images.getIndexes()`). Verify that the `requestId_1` index is `unique: true`, and record any difference in this task before continuing.
   - Checked in mongosh on 2026-10-23. Every index listed is present, and `requestId_1` is `unique: true`. Two leftovers aren't in lora-trainer's code: `lora_trainings.status_1` (redundant with `status_1_hidden_1`) and `generated_images.walletAddress_1` (pre-accounts). Both are noted in `CLAUDE.md` and left in place.
-- [ ] 1.2 Confirm production `DO_SPACES_CDN_URL` on the droplet equals lora-trainer's `DO_SPACES_CDN_URL` in Vercel, ignoring a trailing slash. Verify by comparing the two values (don't paste them into the repo).
-  - Pending: needs the droplet's `.env` and Vercel's value, which I didn't read.
+- [x] 1.2 Confirm production `DO_SPACES_CDN_URL` on the droplet equals lora-trainer's `DO_SPACES_CDN_URL` in Vercel, ignoring a trailing slash. Verify by comparing the two values (don't paste them into the repo).
+  - Checked 2026-10-23: lora-trainer's Vercel value and the droplet's are both `https://dmbk-io.sfo2.cdn.digitaloceanspaces.com`. The droplet's value was read off a production `thumbUrl`, which is built from it.
 
 ## 2. Repository
 
