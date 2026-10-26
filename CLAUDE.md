@@ -27,16 +27,16 @@ npm run test:mutations  # end-to-end mutation checks against a running local ser
 
 ## What this is
 
-A Relay GraphQL API (Pothos + Yoga + Mongoose) over data **owned by two other apps** on the same Atlas cluster (`dmbk-world`):
+A Relay GraphQL API (Pothos + Yoga + Mongoose) over databases on one Atlas cluster (`dmbk-world`). It owns all of them except `dmbk-sound`:
 
 | DB | Collections served | Owning app |
 |---|---|---|
 | `dmbk-photos` | `photos`, `keywords` | **this API** since dmbk's reads moved here ([dblodorn/dmbk#37](https://github.com/dblodorn/dmbk/pull/37)); dmbk writes and reads nothing in it. `models/photos.ts` is the schema source of truth, and the indexes are listed below |
 | `dmbk-sound` | `sound_snapshots` (read-only here) | `dblodorn/dmbk` (`src/lib/soundcloud/build-playlists.ts` is the only writer) |
-| `lora-trainer` | `lora_trainings`, `generated_images` | **this API**, once lora-trainer's `adopt-relay-graphql-client` ships. Until then both write the same shapes: lora-trainer directly, this API through the `loraTrainer…` mutations (`lib/lora/repository.ts`). `models/lora.ts` is the schema source of truth, and the indexes are listed below |
+| `lora-trainer` | `lora_trainings`, `generated_images` | **this API** since lora-trainer's `adopt-relay-graphql-client` shipped ([dblodorn/lora-trainer#32](https://github.com/dblodorn/lora-trainer/pull/32)). lora-trainer reads through the API and writes through the `loraTrainer…` mutations (`lib/lora/repository.ts`); it has no database access. `models/lora.ts` is the schema source of truth, and the indexes are listed below |
 | `dmbk-accounts` | `user`, `account`, `session`, `arena_profiles`, `api_clients` | **this API** (better-auth manages its three collections and their indexes; `lib/arena/profile.ts` owns `arena_profiles` and `lib/api-keys/store.ts` owns `api_clients`, each creating its one index) |
 
-Both apps still read/write these collections directly (tRPC). The plan is to move their clients onto this API and retire their own endpoints — dmbk's `/api/graphql` (`src/server/graphql/`) and the tRPC routers — **one capability at a time, only once the replacement here is live**. Accounts live here, in `dmbk-accounts`; both apps sign in through it (`openspec/specs/accounts-auth/`; history in `openspec/changes/archive/2026-10-21-google-accounts/`). Both apps have moved; their old SIWE collections (`user`/`session`/`account`/`verification`/`walletAddress`) were backed up and dropped on 2026-10-21.
+lora-trainer no longer touches Mongo: its Atlas user (`lora-trainer-app2`) was deleted on 2026-10-26, and `graphql-api` is the only user with access to `lora-trainer`. The one collection another app still writes is dmbk's `sound_snapshots`. Moves like these go **one capability at a time, only once the replacement here is live**. Accounts live here, in `dmbk-accounts`; both apps sign in through it (`openspec/specs/accounts-auth/`; history in `openspec/changes/archive/2026-10-21-google-accounts/`). Both apps have moved; their old SIWE collections (`user`/`session`/`account`/`verification`/`walletAddress`) were backed up and dropped on 2026-10-21.
 
 ## Architecture
 

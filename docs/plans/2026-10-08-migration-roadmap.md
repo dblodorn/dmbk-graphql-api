@@ -100,9 +100,9 @@ Progress (OpenSpec change `port-photo-upload-and-delete`):
 
 Shipped by `lora-trainer-writes`:
 
-- [ ] `loraTrainerCreateTraining`, `loraTrainerSetTrainingAssets`, `loraTrainerCompleteTraining`, `loraTrainerRecordImages` (signed in, owner rules as for hiding, URL rules in `lib/lora/urls.ts`).
-- [ ] `viewer.loraTrainerTrainingByRequestId(requestId)`, for completion after a reload.
-- [ ] `loraTrainerSlideshowImages(count)`: excludes hidden images and hidden or unfinished trainings, unlike the original.
+- [x] `loraTrainerCreateTraining`, `loraTrainerSetTrainingAssets`, `loraTrainerCompleteTraining`, `loraTrainerRecordImages` (signed in, owner rules as for hiding, URL rules in `lib/lora/urls.ts`).
+- [x] `viewer.loraTrainerTrainingByRequestId(requestId)`, for completion after a reload.
+- [x] `loraTrainerSlideshowImages(count)`: excludes hidden images and hidden or unfinished trainings, unlike the original.
 - **Covered by Phase 1 already.** lora-trainer's `listHidden`, `listHiddenImages`, `getById` and `listByLora` map to `viewer.loraTrainerTrainings(visibility: HIDDEN)`, `viewer.loraTrainerImages(visibility: HIDDEN)`, `node` and `LoraTraining.images`. The new versions don't have the original leaks: anyone could read hidden records or list hidden items by wallet.
 - **Not now.** `viewer.loraTrainerRemainingGenerations` (quotas come back only with open sign-up and payments, keyed on `ownerId`) and a `failed` status transition.
 
