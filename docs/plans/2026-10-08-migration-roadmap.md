@@ -9,7 +9,7 @@ The one rule throughout: **an app's own endpoint is removed only after its repla
 | 1 | Relay reads, SIWE sign-in, curation mutations | Deployed 2026-10-20 at `graphql.dmbk.network` |
 | 1.5 | Google accounts owned by this API; remove SIWE and lora-trainer's crypto payments | Done 2026-10-21 — `openspec/changes/archive/2026-10-21-google-accounts/` |
 | 2 | Photo upload and delete | Deployed 2026-10-20 |
-| 3 | LoRA training and image generation | Planned (needs investigation first) |
+| 3 | LoRA training and image generation (records only; fal.ai stays in lora-trainer) | In progress — `openspec/changes/lora-trainer-writes/` |
 | 4 | Move clients over; delete the apps' GraphQL/tRPC endpoints | In progress — dmbk admin writes moved (step 2) |
 
 **Phase 1.5 comes before Phase 4's client moves.** It replaces SIWE everywhere: the API signs people in with Google (`signInWithGoogle`), admins are `ADMIN_EMAILS`, LoRA records are owned by `ownerId`, and lora-trainer's crypto payments are removed rather than ported. Phase 1's checklist below is history and still names the SIWE setup it shipped with.
@@ -92,21 +92,19 @@ Progress (OpenSpec change `port-photo-upload-and-delete`):
 
 ## Phase 3 — LoRA training and image generation
 
-**Investigate first.** These files in `dblodorn/lora-trainer` have not been read yet: `src/server/api/features/fal.ts`, `payment.ts`, `storage.ts`, `src/lib/lora-scale.ts`, `src/lib/image-dimensions.ts`, and wherever `trainLora` and Are.na channel lookup live.
+**Decided 2026-10-23** (OpenSpec change `lora-trainer-writes`, with lora-trainer's `adopt-relay-graphql-client`): the fal.ai calls and the Spaces mirroring **stay in lora-trainer**, which keeps them as its own tRPC procedures. This API only records what they produced. So:
 
-Known so far (from `features/lora.ts`, `generate.ts`, `slideshow.ts`):
+- No `FAL_KEY` here, and no generation call in this API: the "long-running mutation or polled `pending` records" question is moot. lora-trainer's procedure blocks on fal.ai as it does today.
+- Completion stays client-driven (no fal.ai webhook): lora-trainer polls fal.ai, mirrors the weights, then calls `loraTrainerCompleteTraining`.
+- Spaces key layout is unchanged, so image ids are chosen by lora-trainer (it keys `lora-trainer/images/{loraId}/{id}.{ext}` before recording).
 
-- **Training.** `createPendingLora` inserts a `pending` record; later, a client-called `lora.complete` mirrors the weights to Spaces (`lora-trainer/loras/{id}/{id}.{ext}`) and backfills the training images into Spaces.
-  - Completion is driven by the client today. Decide whether this API should take a fal.ai webhook instead.
-- **Generation.** `generate.images` calls `fal.subscribe("fal-ai/flux-lora")` with 4 images per batch.
-  - lora-trainer's per-wallet rate limit (8 batches a day, unless payment-exempt) is removed in Phase 1.5. Quotas, if any, come back with open sign-up and payments, keyed on `ownerId`.
-  - Each image is mirrored to `lora-trainer/images/{loraId}/{id}.{ext}`, keeping both `imageUrl` (fal) and `cdnUrl` (Spaces).
-  - The call blocks for the whole generation. Decide between a long-running mutation (raise timeouts in Caddy) and returning `pending` records that the client polls or subscribes to.
-- **Remaining quota.** `generate.remaining` becomes a `Viewer` field (`viewer.loraTrainerRemainingGenerations`).
-- **Slideshow.** `slideshow.randomImages` becomes a query (`loraTrainerSlideshowImages`). Unlike the original, it should exclude hidden images and hidden trainings.
-- **Covered by Phase 1 already.** lora-trainer's `listHidden`, `listHiddenImages`, `getById` and `listByLora` map to `viewer.loraTrainerTrainings`, `viewer.loraTrainerImages`, `node` and `LoraTraining.images`. The new versions don't have the original leaks: anyone could read hidden records or list hidden items by wallet.
+Shipped by `lora-trainer-writes`:
 
-Needs: `FAL_KEY` and the Spaces credentials from Phase 2. (`payment.ts` is deleted in Phase 1.5, so there's nothing to port from it.)
+- [ ] `loraTrainerCreateTraining`, `loraTrainerSetTrainingAssets`, `loraTrainerCompleteTraining`, `loraTrainerRecordImages` (signed in, owner rules as for hiding, URL rules in `lib/lora/urls.ts`).
+- [ ] `viewer.loraTrainerTrainingByRequestId(requestId)`, for completion after a reload.
+- [ ] `loraTrainerSlideshowImages(count)`: excludes hidden images and hidden or unfinished trainings, unlike the original.
+- **Covered by Phase 1 already.** lora-trainer's `listHidden`, `listHiddenImages`, `getById` and `listByLora` map to `viewer.loraTrainerTrainings(visibility: HIDDEN)`, `viewer.loraTrainerImages(visibility: HIDDEN)`, `node` and `LoraTraining.images`. The new versions don't have the original leaks: anyone could read hidden records or list hidden items by wallet.
+- **Not now.** `viewer.loraTrainerRemainingGenerations` (quotas come back only with open sign-up and payments, keyed on `ownerId`) and a `failed` status transition.
 
 ---
 
@@ -123,7 +121,7 @@ Do this per capability, in this order:
    - Progress (dmbk OpenSpec change `admin-writes-through-graphql-api`): upload, edit, hide and the new delete all call this API's mutations through a same-origin proxy in dmbk (`/api/admin/graphql`), which forwards only Relay persisted operations with the session token from dmbk's HTTP-only cookie. dmbk's tRPC write procedures are deleted, along with its Spaces client and sharp derivatives, and AVIF now finalizes from the admin. dmbk's `pnpm verify:admin` drives its screens against a local server here, using `npm run test:mutations -- --admin-token` for its sessions. Relay is in dmbk for writes only: reads (step 1) and deleting dmbk's `/api/graphql` and tRPC read procedures (step 3) remain.
 3. **Delete dmbk's temporary API.** ✅ Done 2026-10-21 (dmbk#37): `/api/graphql`, `/api/trpc`, the tRPC router and `lib/photos/repository.ts` are gone. Remove `src/server/graphql/`, the `/api/graphql` route, and the tRPC photo procedures whose callers have all moved. (better-auth and the SIWE wiring are already gone, in Phase 1.5.)
 4. **dmbk public pages.** ✅ Decided and done 2026-10-21 (dmbk#37): they read this API. `/photos` renders its first page on the server from `dmbkPhotos` and the browser pages against the API directly (CORS admits `dmbk.io`, `*.dmbk.io` and `*.vercel.app`). `/sound`'s fallback reads `dmbkSoundPlaylists`. dmbk no longer opens `dmbk-photos`; its `dmbk-photos-app` user has `readWrite` on `dmbk-sound` only, for the build's snapshot write. The `dmbk-photos` indexes are this API's now (#21).
-5. **lora-trainer.** Move reads, then hide/unhide, then (after Phase 3) training and generation. Then delete its tRPC routers and its direct Mongo access.
+5. **lora-trainer.** One change in that repo, `adopt-relay-graphql-client`, after Phase 3 ships: reads and hide/unhide through Relay over a same-origin proxy, its fal.ai procedures persisting through the Phase 3 mutations, then its Mongo access and the non-fal.ai tRPC routers deleted. After a week with no rollback, remove `lora-trainer-app2`'s Atlas access.
 
 Once dmbk no longer writes photos, the "keep in sync with dmbk" notes in `src/lib/photos/keywords.ts` and `CLAUDE.md` can go, and this repo becomes the source of truth for the document shapes.
 

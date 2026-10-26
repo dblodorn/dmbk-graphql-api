@@ -1,6 +1,6 @@
 import { builder } from '../builder.js';
 import type { Viewer } from '../../auth/viewer.js';
-import { listOwnImages, listOwnTrainings } from '../../lib/lora/repository.js';
+import { findOwnTrainingByRequestId, listOwnImages, listOwnTrainings } from '../../lib/lora/repository.js';
 import { toConnection } from '../connection.js';
 import { VisibilityEnum } from './photo.js';
 import { GeneratedImageRef, LoraTrainingRef } from './lora.js';
@@ -26,6 +26,13 @@ export const ViewerRef = builder.objectRef<Viewer>('Viewer').implement({
       description: 'Images this account generated.',
       args: { visibility: t.arg({ type: VisibilityEnum, defaultValue: 'any' }) },
       resolve: async (viewer, args) => toConnection(await listOwnImages(viewer, args.visibility ?? 'any', args)),
+    }),
+    loraTrainerTrainingByRequestId: t.field({
+      type: LoraTrainingRef,
+      nullable: true,
+      description: "This account's own training for a fal.ai request id, at any status, or null.",
+      args: { requestId: t.arg.string({ required: true }) },
+      resolve: (viewer, args) => findOwnTrainingByRequestId(viewer, args.requestId),
     }),
     arena: t.field({
       type: ArenaProfileRef,

@@ -2,9 +2,10 @@ import { Schema } from 'mongoose';
 import { loraDb } from '../db/mongoose.js';
 
 /*
- * Documents in `lora-trainer`, written by the lora-trainer app
- * (src/server/api/db.ts there is the source of truth). String hex `_id`s and
- * ISO-8601 `createdAt` strings; mirrored exactly, with no `__v` or timestamps.
+ * Documents in `lora-trainer`. This API writes them through the `loraTrainer…`
+ * mutations, and lora-trainer still writes the same shapes directly until it
+ * moves onto them, so the two must not drift. String hex `_id`s and ISO-8601
+ * `createdAt` strings, with no `__v` or timestamps.
  */
 
 const docOptions = { versionKey: false, timestamps: false, strict: true } as const;
