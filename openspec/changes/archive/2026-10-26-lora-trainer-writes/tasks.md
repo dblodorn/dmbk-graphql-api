@@ -40,5 +40,7 @@
 
 ## 6. Ship
 
-- [ ] 6.1 Merge to `main` and confirm the deploy job passes. Verify with production introspection: the four mutations, `Viewer.loraTrainerTrainingByRequestId` and `loraTrainerSlideshowImages` are present.
-- [ ] 6.2 After lora-trainer's `adopt-relay-graphql-client` has run for a week with no rollback, remove `lora-trainer-app2`'s Atlas access and rewrite `CLAUDE.md`'s "Both apps still read/write…" paragraph for lora-trainer. Verify that lora-trainer production still works and that the Atlas user list no longer grants it `lora-trainer`.
+- [x] 6.1 Merge to `main` and confirm the deploy job passes. Verify with production introspection: the four mutations, `Viewer.loraTrainerTrainingByRequestId` and `loraTrainerSlideshowImages` are present.
+  - Merged 2026-10-26 (`f3ae958`); the Deploy to Droplet run passed. Production introspection lists all four mutations, `Viewer.loraTrainerTrainingByRequestId` and `loraTrainerSlideshowImages(count: Int = 10)`, and an anonymous `loraTrainerSlideshowImages(count: 3)` returned 3 CDN URLs.
+- [x] 6.2 Once lora-trainer's `adopt-relay-graphql-client` is live and checked in production (its owner is the only user, so no soak period), remove `lora-trainer-app2`'s Atlas access and rewrite `CLAUDE.md`'s "Both apps still read/write…" paragraph for lora-trainer. Verify that lora-trainer production still works and that the Atlas user list no longer grants it `lora-trainer`.
+  - 2026-10-26: lora-trainer#32 merged and checked in production; `lora-trainer-app2` deleted in Atlas (the user list now grants `lora-trainer` only to `graphql-api`); lora-trainer's production gallery still reads through its `/api/graphql`. `CLAUDE.md`'s table row and paragraph are rewritten.
