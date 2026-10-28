@@ -609,13 +609,16 @@ async function authSuite(accounts: Record<string, TestAccount>): Promise<void> {
 // ---------------------------------------------------------------------------
 // LoRA writes (lora-trainer's fal.ai results)
 
-const TRAINING_FIELDS = 'id status hidden loraWeightsUrl trainingZipUrl trainingImageUrls';
+const TRAINING_FIELDS = 'id status hidden loraWeightsUrl trainingZipUrl trainingImageUrls trainerModel';
 const CREATE_TRAINING = `mutation($input: LoraTrainerCreateTrainingInput!) { loraTrainerCreateTraining(input: $input) { loraTraining { ${TRAINING_FIELDS} } } }`;
 const SET_TRAINING_ASSETS = `mutation($input: LoraTrainerSetTrainingAssetsInput!) { loraTrainerSetTrainingAssets(input: $input) { loraTraining { ${TRAINING_FIELDS} } } }`;
 const COMPLETE_TRAINING = `mutation($input: LoraTrainerCompleteTrainingInput!) { loraTrainerCompleteTraining(input: $input) { loraTraining { ${TRAINING_FIELDS} } } }`;
-const RECORD_IMAGES = `mutation($input: LoraTrainerRecordImagesInput!) { loraTrainerRecordImages(input: $input) { loraTraining { id } generatedImages { id prompt url hidden } } }`;
+const RECORD_IMAGES = `mutation($input: LoraTrainerRecordImagesInput!) { loraTrainerRecordImages(input: $input) { loraTraining { id } generatedImages { id prompt url hidden generatorModel } } }`;
 const BY_REQUEST_ID = `query($requestId: String!) { viewer { loraTrainerTrainingByRequestId(requestId: $requestId) { id status } } }`;
 const SLIDESHOW = `query($count: Int!) { loraTrainerSlideshowImages(count: $count) { url } }`;
+const TRAINING_MODELS = `query($id: ID!) { node(id: $id) { ... on LoraTraining { trainerModel images(first: 20) { edges { node { generatorModel } } } } } }`;
+const LEGACY_TRAINER = 'fal-ai/flux-lora-fast-training';
+const LEGACY_GENERATOR = 'fal-ai/flux-lora';
 
 async function loraWritesSuite(ownerId: string, ownerToken: string, otherToken: string): Promise<void> {
   console.log('\nLoRA writes');
@@ -658,12 +661,25 @@ async function loraWritesSuite(ownerId: string, ownerToken: string, otherToken: 
     await expectRefused('loraTrainerCreateTraining anonymous', CREATE_TRAINING, createInput(`test-${tag}-anon`), undefined, ['UNAUTHENTICATED', 'FORBIDDEN']);
     const created = (await ok(CREATE_TRAINING, createInput(requestId), ownerToken)).loraTrainerCreateTraining.loraTraining;
     check('owner creates a pending training', created.status === 'PENDING' && created.hidden === false, created);
+    check('trainer model omitted → legacy FLUX trainer', created.trainerModel === LEGACY_TRAINER, created.trainerModel);
     check('pending training null for anonymous', (await ok(NODE, { id: created.id })).node === null);
     await expectRefused('duplicate request id', CREATE_TRAINING, createInput(requestId), ownerToken, ['BAD_USER_INPUT']);
     await expectRefused('steps out of range', CREATE_TRAINING, createInput(`test-${tag}-steps`, { steps: 50 }), ownerToken, ['BAD_USER_INPUT']);
     await expectRefused('no source images', CREATE_TRAINING, createInput(`test-${tag}-none`, { imageUrls: [] }), ownerToken, ['BAD_USER_INPUT']);
     await expectRefused('trigger word too long', CREATE_TRAINING, createInput(`test-${tag}-long`, { triggerWord: 'x'.repeat(51) }), ownerToken, ['BAD_USER_INPUT']);
     await expectRefused('non-https source image', CREATE_TRAINING, createInput(`test-${tag}-http`, { imageUrls: ['http://example.invalid/a.jpg'] }), ownerToken, ['BAD_USER_INPUT']);
+
+    // Trainer model
+    const modelled = (await ok(CREATE_TRAINING, createInput(`test-${tag}-model`, { trainerModel: 'fal-ai/z-image-turbo-trainer-v2' }), ownerToken)).loraTrainerCreateTraining.loraTraining;
+    check('trainer model given → stored', modelled.trainerModel === 'fal-ai/z-image-turbo-trainer-v2', modelled.trainerModel);
+    const future = (await ok(CREATE_TRAINING, createInput(`test-${tag}-future`, { trainerModel: 'fal-ai/some-future-trainer/v3' }), ownerToken)).loraTrainerCreateTraining.loraTraining;
+    check('unlisted but well-formed trainer model accepted', future.trainerModel === 'fal-ai/some-future-trainer/v3', future.trainerModel);
+    await expectRefused('malformed trainer model', CREATE_TRAINING, createInput(`test-${tag}-badmodel`, { trainerModel: 'https://fal.ai/flux' }), ownerToken, ['BAD_USER_INPUT']);
+    check('malformed trainer model wrote nothing', (await withDb(({ LoraTrainingModel }) => LoraTrainingModel.countDocuments({ requestId: `test-${tag}-badmodel` }))) === 0);
+
+    // Records from before models were stored read as the legacy endpoints.
+    const legacy = (await ok(TRAINING_MODELS, { id: globalId('LoraTraining', hiddenLoraId) }, ownerToken)).node;
+    check('record without a model → legacy trainer and generator', legacy?.trainerModel === LEGACY_TRAINER && legacy.images.edges[0]?.node.generatorModel === LEGACY_GENERATOR, legacy);
 
     // Lookup by request id
     const found = (await ok(BY_REQUEST_ID, { requestId }, ownerToken)).viewer.loraTrainerTrainingByRequestId;
@@ -700,6 +716,15 @@ async function loraWritesSuite(ownerId: string, ownerToken: string, otherToken: 
     }, ownerToken)).loraTrainerRecordImages.generatedImages;
     check('owner records a batch of 4 in order', recorded.map((r: { id: string }) => r.id).join() === batch.map((id) => globalId('GeneratedImage', id)).join(), recorded);
     check('recorded images prefer the mirror', recorded[0]?.url === mirror(`${batch[0]}.png`), recorded[0]);
+    check('generator model omitted → legacy on every image', recorded.every((r: { generatorModel: string }) => r.generatorModel === LEGACY_GENERATOR), recorded);
+
+    const modelBatch = [imageId(), imageId()];
+    const modelRecorded = (await ok(RECORD_IMAGES, {
+      input: { loraTrainingId: created.id, generatorModel: 'fal-ai/z-image/turbo/lora', images: modelBatch.map((id) => image(id)) },
+    }, ownerToken)).loraTrainerRecordImages.generatedImages;
+    check('generator model given → on every image', modelRecorded.length === 2 && modelRecorded.every((r: { generatorModel: string }) => r.generatorModel === 'fal-ai/z-image/turbo/lora'), modelRecorded);
+    const badModelIds = [imageId()];
+    await expectRefused('malformed generator model', RECORD_IMAGES, { input: { loraTrainingId: created.id, generatorModel: 'fal-ai/Flux Lora', images: badModelIds.map((id) => image(id)) } }, ownerToken, ['BAD_USER_INPUT']);
 
     const reused = [imageId(), batch[0]];
     await expectRefused('image id already used', RECORD_IMAGES, { input: { loraTrainingId: created.id, images: reused.map((id) => image(id)) } }, ownerToken, ['BAD_USER_INPUT']);
@@ -708,7 +733,7 @@ async function loraWritesSuite(ownerId: string, ownerToken: string, otherToken: 
     await expectRefused('malformed image id', RECORD_IMAGES, { input: { loraTrainingId: created.id, images: [image('NOT-HEX')] } }, ownerToken, ['BAD_USER_INPUT']);
     const offPrefix = imageId();
     await expectRefused('off-prefix image mirror', RECORD_IMAGES, { input: { loraTrainingId: created.id, images: [image(offPrefix, { cdnUrl: 'https://example.invalid/x.png' })] } }, ownerToken, ['BAD_USER_INPUT']);
-    check('refused batches wrote nothing', (await countImages([...pendingIds, reused[0], twice, offPrefix])) === 0);
+    check('refused batches wrote nothing', (await countImages([...pendingIds, reused[0], twice, offPrefix, ...badModelIds])) === 0);
 
     const otherIds = [imageId()];
     await expectRefused("record images, someone else's hidden LoRA", RECORD_IMAGES, { input: { loraTrainingId: globalId('LoraTraining', hiddenLoraId), images: otherIds.map((id) => image(id)) } }, otherToken, ['NOT_FOUND']);
@@ -719,6 +744,9 @@ async function loraWritesSuite(ownerId: string, ownerToken: string, otherToken: 
     try {
       await expectRefused('assets, non-owner (public)', SET_TRAINING_ASSETS, { input: { id: created.id, trainingZipUrl: zip } }, otherToken, ['FORBIDDEN']);
       await expectRefused('complete, non-owner (public)', COMPLETE_TRAINING, { input: { id: created.id, loraWeightsUrl: mirror('c.safetensors') } }, otherToken, ['FORBIDDEN']);
+      const publicRead = (await ok(TRAINING_MODELS, { id: created.id })).node;
+      const publicModels = publicRead?.images.edges.map((e: { node: { generatorModel: string } }) => e.node.generatorModel) ?? [];
+      check('anonymous read of a public training shows its models', publicRead?.trainerModel === LEGACY_TRAINER && publicModels.length === 6 && publicModels.includes('fal-ai/z-image/turbo/lora'), publicRead);
     } finally {
       await ok(SET_TRAINING_HIDDEN, { input: { id: created.id, hidden: true } }, ownerToken);
     }

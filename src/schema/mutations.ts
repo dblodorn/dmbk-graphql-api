@@ -260,6 +260,9 @@ builder.relayMutationField(
       imageUrls: t.stringList({ required: true, description: '1–20 https source image URLs.' }),
       arenaChannelUrl: t.string(),
       arenaChannelTitle: t.string({ description: 'Up to 200 characters.' }),
+      trainerModel: t.string({
+        description: 'The fal.ai endpoint id it was submitted to. Omitted: fal-ai/flux-lora-fast-training.',
+      }),
     }),
   },
   {
@@ -347,13 +350,21 @@ builder.relayMutationField(
     inputFields: (t) => ({
       loraTrainingId: t.globalID({ required: true, for: LoraTrainingRef }),
       images: t.field({ type: [RecordImageInput], required: true, description: '1–8 images.' }),
+      generatorModel: t.string({
+        description: 'The fal.ai endpoint id that generated the batch. Omitted: fal-ai/flux-lora.',
+      }),
     }),
   },
   {
     authScopes: { signedIn: true },
     description: 'Record images generated with one completed LoRA, all or nothing.',
     resolve: async (_root, { input }, context) => {
-      const { training, images } = await recordImages(context.viewer!, input.loraTrainingId.id, input.images);
+      const { training, images } = await recordImages(
+        context.viewer!,
+        input.loraTrainingId.id,
+        input.images,
+        input.generatorModel,
+      );
       return { loraTraining: training, generatedImages: images };
     },
   },

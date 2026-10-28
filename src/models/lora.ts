@@ -21,6 +21,8 @@ export interface LoraTrainingDoc {
   walletAddress?: string;
   triggerWord: string;
   steps: number;
+  /** fal.ai endpoint id it was trained with. Missing on older records (`lib/lora/models.ts`). */
+  trainerModel?: string;
   /** Original upload URLs (fal.ai). */
   imageUrls: string[];
   /** Mirrors of `imageUrls` on DO Spaces; empty on older records. */
@@ -53,6 +55,8 @@ export interface GeneratedImageDoc {
   loraScaleName: string | null;
   genWidth: number | null;
   genHeight: number | null;
+  /** fal.ai endpoint id it was generated with. Missing on older records (`lib/lora/models.ts`). */
+  generatorModel?: string;
   hidden?: boolean;
   createdAt: string;
 }
@@ -65,6 +69,7 @@ const loraTrainingSchema = new Schema<LoraTrainingDoc>(
     walletAddress: { type: String },
     triggerWord: { type: String, required: true },
     steps: { type: Number, required: true },
+    trainerModel: { type: String },
     imageUrls: { type: [String], default: [] },
     imageUrlsSpaces: { type: [String], default: [] },
     trainingZipUrl: { type: String, default: null },
@@ -94,6 +99,7 @@ const generatedImageSchema = new Schema<GeneratedImageDoc>(
     loraScaleName: { type: String, default: null },
     genWidth: { type: Number, default: null },
     genHeight: { type: Number, default: null },
+    generatorModel: { type: String },
     hidden: { type: Boolean },
     createdAt: { type: String, required: true },
   },

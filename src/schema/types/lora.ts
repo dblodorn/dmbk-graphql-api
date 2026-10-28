@@ -1,6 +1,7 @@
 import { builder } from '../builder.js';
 import type { GeneratedImageDoc, LoraTrainingDoc } from '../../models/lora.js';
 import { isOwner, listImagesForTraining } from '../../lib/lora/repository.js';
+import { LEGACY_GENERATOR_MODEL, LEGACY_TRAINER_MODEL } from '../../lib/lora/models.js';
 import { toConnection } from '../connection.js';
 
 export const LoraStatusEnum = builder.enumType('LoraStatus', {
@@ -31,6 +32,10 @@ builder.node(LoraTrainingRef, {
   fields: (t) => ({
     triggerWord: t.exposeString('triggerWord'),
     steps: t.exposeInt('steps'),
+    trainerModel: t.string({
+      description: 'The fal.ai endpoint id it was trained with. Records from before this was stored read as the FLUX trainer.',
+      resolve: (l) => l.trainerModel ?? LEGACY_TRAINER_MODEL,
+    }),
     status: t.field({ type: LoraStatusEnum, resolve: (l) => l.status }),
     createdAt: t.exposeString('createdAt', { description: 'ISO-8601.' }),
     trainingImageUrls: t.stringList({
@@ -68,6 +73,10 @@ builder.node(GeneratedImageRef, {
     seed: t.exposeString('seed', { nullable: true }),
     loraScaleValue: t.exposeString('loraScaleValue', { nullable: true }),
     loraScaleName: t.exposeString('loraScaleName', { nullable: true }),
+    generatorModel: t.string({
+      description: 'The fal.ai endpoint id it was generated with. Records from before this was stored read as fal-ai/flux-lora.',
+      resolve: (img) => img.generatorModel ?? LEGACY_GENERATOR_MODEL,
+    }),
     createdAt: t.exposeString('createdAt', { description: 'ISO-8601.' }),
     training: t.field({
       type: LoraTrainingRef,
