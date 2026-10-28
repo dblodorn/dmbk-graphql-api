@@ -9,6 +9,7 @@ import { loraDb } from '../../db/mongoose.js';
 import type { Viewer } from '../../auth/viewer.js';
 import { isLoraId, newLoraId } from './ids.js';
 import { assertHttpsUrl, assertMirrorUrl } from './urls.js';
+import { assertModelId, LEGACY_GENERATOR_MODEL, LEGACY_TRAINER_MODEL } from './models.js';
 
 /*
  * Every lora-trainer query goes through this module, and visibility is decided
@@ -164,6 +165,8 @@ export interface CreateTrainingInput {
   imageUrls: string[];
   arenaChannelUrl?: string | null;
   arenaChannelTitle?: string | null;
+  /** fal.ai endpoint id. Omitted: the legacy FLUX trainer. */
+  trainerModel?: string | null;
 }
 
 export interface TrainingAssetsInput {
@@ -243,6 +246,7 @@ export async function createTraining(viewer: Viewer, input: CreateTrainingInput)
   input.imageUrls.forEach((url, i) => assertHttpsUrl(url, `imageUrls[${i}]`));
   if (input.arenaChannelUrl != null) assertHttpsUrl(input.arenaChannelUrl, 'arenaChannelUrl');
   if (input.arenaChannelTitle != null) assertLength(input.arenaChannelTitle, 'arenaChannelTitle', 0, 200);
+  if (input.trainerModel != null) assertModelId(input.trainerModel, 'trainerModel');
 
   const doc: LoraTrainingDoc = {
     _id: newLoraId(),
@@ -250,6 +254,7 @@ export async function createTraining(viewer: Viewer, input: CreateTrainingInput)
     ownerId: viewer.id,
     triggerWord: input.triggerWord,
     steps: input.steps,
+    trainerModel: input.trainerModel ?? LEGACY_TRAINER_MODEL,
     imageUrls: input.imageUrls,
     imageUrlsSpaces: [],
     trainingZipUrl: null,
@@ -319,12 +324,15 @@ export function findOwnTrainingByRequestId(viewer: Viewer, requestId: string): P
  * Record a batch of images the viewer generated with one LoRA, all or nothing.
  * The LoRA must be completed and visible to the viewer. Ids come from the
  * client, which builds each image's Spaces key from its id before recording.
+ * One fal.ai call makes the whole batch, so its model is given once.
  */
 export async function recordImages(
   viewer: Viewer,
   loraTrainingId: string,
   images: RecordImageInput[],
+  generatorModel?: string | null,
 ): Promise<{ training: LoraTrainingDoc; images: GeneratedImageDoc[] }> {
+  if (generatorModel != null) assertModelId(generatorModel, 'generatorModel');
   if (images.length < 1 || images.length > MAX_IMAGES_PER_BATCH) {
     throw new InvalidInputError(`images takes 1–${MAX_IMAGES_PER_BATCH} images.`);
   }
@@ -366,6 +374,7 @@ export async function recordImages(
     loraScaleName: image.loraScaleName ?? null,
     genWidth: image.genWidth ?? null,
     genHeight: image.genHeight ?? null,
+    generatorModel: generatorModel ?? LEGACY_GENERATOR_MODEL,
     hidden: false,
     createdAt,
   }));
