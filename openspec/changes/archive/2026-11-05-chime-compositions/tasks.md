@@ -52,5 +52,5 @@
   - `dmbk-sound` row of the DB table (per-collection owners) and the indexes list;
   - catalog steps (windchime `pnpm catalog` → copy → re-run `chime:collection` → deploy);
   - `X-End-User-IP`, and the new env vars.
-- [ ] 7.2 Open the PR. After merge and deploy, run `npm run chime:collection` (report), then `-- --apply` against production, and confirm with a `dmbkSoundChimeCompositions` query
-- [ ] 7.3 Issue the windchime key (`npm run api-client -- create windchime`) and give it to windchime's Vercel env as `DMBK_GRAPHQL_API_KEY` (operator step, done by the user)
+- [x] 7.2 Open the PR. After merge and deploy, run `npm run chime:collection` (report), then `-- --apply` against production, and confirm with a `dmbkSoundChimeCompositions` query
+- [x] 7.3 Issue the windchime key (`npm run api-client -- create windchime`) and give it to windchime's Vercel env as `DMBK_GRAPHQL_API_KEY` (operator step, done by the user)
