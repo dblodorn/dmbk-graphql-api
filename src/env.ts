@@ -67,12 +67,24 @@ export const env = {
     maxRootFields: positiveInt('PLAYGROUND_MAX_ROOT_FIELDS', 5),
   },
 
+  /** Anonymous chime-composition saves (`lib/chime/limits.ts`). */
+  chimeSaves: {
+    /** Saves per visitor (client + forwarded IP) per window, refilled evenly. */
+    rateLimit: positiveInt('CHIME_SAVE_RATE_LIMIT', 10),
+    rateWindowSeconds: positiveInt('CHIME_SAVE_RATE_WINDOW_SECONDS', 3600),
+    /** Saves per client per day, whatever the visitor. */
+    dailyLimit: positiveInt('CHIME_SAVE_DAILY_LIMIT', 500),
+  },
+
   mongoUri: required('MONGODB_URI'),
   /** Owned by the dmbk app. This API reads it and performs curation writes. */
   photosDbName: process.env.PHOTOS_DB_NAME || 'dmbk-photos',
   /** Owned by the lora-trainer app. */
   loraDbName: process.env.LORA_DB_NAME || 'lora-trainer',
-  /** Owned by the dmbk app (the SoundCloud snapshot). Read-only here. */
+  /**
+   * Owned per collection: dmbk owns `sound_snapshots` (read-only here), this
+   * API owns `chime_compositions`.
+   */
   soundDbName: process.env.SOUND_DB_NAME || 'dmbk-sound',
 
   /** Photos store storage keys; public URLs are this base + key. No trailing slash. */

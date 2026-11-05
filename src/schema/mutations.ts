@@ -1,4 +1,5 @@
 import { builder } from './builder.js';
+import { forbidden } from '../errors.js';
 import { signInWithGoogle, signOut, type Viewer } from '../auth/viewer.js';
 import { setPhotoHidden, updatePhoto } from '../lib/photos/repository.js';
 import { deletePhotoWithFiles, finalizePhoto, reservePhotoUpload } from '../lib/photos/upload.js';
@@ -16,6 +17,9 @@ import { PhotoRef } from './types/photo.js';
 import { GeneratedImageRef, LoraTrainingRef } from './types/lora.js';
 import { ViewerRef } from './types/viewer.js';
 import { clearArenaProfile, setArenaProfile } from '../lib/arena/profile.js';
+import { saveComposition, setCompositionHidden } from '../lib/chime/repository.js';
+import { takeSave } from '../lib/chime/limits.js';
+import { ChimeCompositionEdgeRef, ChimeCompositionRef, ChimeUnitInputRef } from './types/chime.js';
 
 /*
  * Every mutation here is a Relay input-object mutation: one `input` argument,
@@ -414,4 +418,52 @@ builder.mutationField('arenaClearUser', (t) =>
       return true;
     },
   }),
+);
+
+// ---------------------------------------------------------------------------
+// dmbk-sound: windchime compositions
+
+builder.relayMutationField(
+  'dmbkSoundSaveChimeComposition',
+  {
+    inputFields: (t) => ({
+      units: t.field({ type: [ChimeUnitInputRef], required: true, description: 'The chimes in page order, 1–16.' }),
+    }),
+  },
+  {
+    description:
+      'Save a composition anonymously, with a title the API generates. Identical units return the stored composition with `created: false`. Rate-limited per visitor (`X-End-User-IP`) and per client.',
+    resolve: async (_root, { input }, context) => {
+      // Only a client app's server saves, even while keyless requests still run as legacy.
+      if (context.client === null) throw forbidden('Saving a composition requires a client API key.');
+      takeSave(context.client, context.endUserIp);
+      return saveComposition(input.units);
+    },
+  },
+  {
+    outputFields: (t) => ({
+      chimeComposition: t.field({ type: ChimeCompositionRef, resolve: (payload) => payload.composition }),
+      chimeCompositionEdge: t.field({ type: ChimeCompositionEdgeRef, resolve: (payload) => payload.composition }),
+      created: t.boolean({ resolve: (payload) => payload.created }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundSetChimeCompositionHidden',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: ChimeCompositionRef }),
+      hidden: t.boolean({ required: true }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => ({ composition: await setCompositionHidden(input.id.id, input.hidden) }),
+  },
+  {
+    outputFields: (t) => ({
+      chimeComposition: t.field({ type: ChimeCompositionRef, resolve: (payload) => payload.composition }),
+    }),
+  },
 );

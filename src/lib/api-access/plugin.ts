@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { isIP } from 'node:net';
 import { specifiedRules } from 'graphql';
 import type { Plugin } from 'graphql-yoga';
 import { env } from '../../env.js';
@@ -18,9 +19,16 @@ import { createPlaygroundLimitRules } from './rules.js';
  * A key that matches nothing (unknown, revoked, malformed) is refused outright
  * in either mode, with one message for all three. The key itself is never
  * logged or echoed.
+ *
+ * A client may name the visitor it acts for in `X-End-User-IP`, used only to
+ * key per-visitor limits. It is read for client requests alone, dropped unless
+ * it is an IP address, and never logged.
  */
 
-export type Access = { kind: 'client'; client: string } | { kind: 'playground' } | { kind: 'legacy' };
+export type Access =
+  | { kind: 'client'; client: string; endUserIp: string | null }
+  | { kind: 'playground' }
+  | { kind: 'legacy' };
 
 const accessByRequest = new WeakMap<Request, Access>();
 
@@ -79,7 +87,8 @@ export function useApiAccess(): Plugin {
           return endResponse(refusal(503, 'UPSTREAM_ERROR', 'The API is temporarily unavailable.'));
         }
         if (!found) return endResponse(refusal(401, 'UNAUTHENTICATED', 'Invalid API key.'));
-        accessByRequest.set(request, { kind: 'client', client: found.client });
+        const endUserIp = request.headers.get('x-end-user-ip')?.trim() ?? '';
+        accessByRequest.set(request, { kind: 'client', client: found.client, endUserIp: isIP(endUserIp) ? endUserIp : null });
         return;
       }
 

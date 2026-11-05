@@ -12,6 +12,7 @@
     "backfill:owner-id": "tsx --env-file=.env scripts/backfill-owner-id.ts",
     "backfill:models": "tsx --env-file=.env scripts/backfill-models.ts",
     "move:sound-snapshots": "tsx --env-file=.env scripts/move-sound-snapshots.ts",
+    "chime:collection": "tsx --env-file=.env scripts/chime-compositions-collection.ts",
     "api-client": "tsx --env-file=.env scripts/api-clients.ts"
   },
   "keywords": [],
