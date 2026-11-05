@@ -5,6 +5,8 @@ import { ForbiddenError, LoraNotFoundError } from './lib/lora/repository.js';
 import { AuthError } from './auth/viewer.js';
 import { StorageCleanupError } from './lib/photos/upload.js';
 import { ArenaNotFoundError, ArenaRateLimitedError, ArenaUpstreamError } from './lib/arena/client.js';
+import { ChimeCompositionNotFoundError } from './lib/chime/repository.js';
+import { ChimeSaveRateLimitedError } from './lib/chime/limits.js';
 
 /**
  * Domain errors a caller can act on, mapped to GraphQL error codes in one
@@ -21,6 +23,8 @@ const CODES: [new (...args: never[]) => Error, string][] = [
   [ArenaNotFoundError, 'NOT_FOUND'],
   [ArenaRateLimitedError, 'RATE_LIMITED'],
   [ArenaUpstreamError, 'UPSTREAM_ERROR'],
+  [ChimeCompositionNotFoundError, 'NOT_FOUND'],
+  [ChimeSaveRateLimitedError, 'RATE_LIMITED'],
 ];
 
 export function forbidden(message: string): GraphQLError {
@@ -42,7 +46,10 @@ export function maskError(error: unknown, message: string, isDev?: boolean): Err
       return new GraphQLError(original.message, {
         nodes: graphqlError?.nodes,
         path: graphqlError?.path,
-        extensions: { code },
+        extensions: {
+          code,
+          ...(original instanceof ChimeSaveRateLimitedError ? { retryAfterSeconds: original.retryAfterSeconds } : {}),
+        },
       });
     }
   }

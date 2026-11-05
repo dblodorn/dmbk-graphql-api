@@ -51,6 +51,13 @@
  *   server trusts, so the rate-limit check exhausts one address's budget
  *   without starving the others.
  *
+ * - Chime compositions: saved through the mutation (anonymous, so nothing marks
+ *   them as the test's except their first unit sitting at x -32768, y 32767,
+ *   which `--cleanup` looks for), listed, hidden and unhidden, and deleted
+ *   directly at the end. Each is public between its save and the cleanup.
+ *   Visitors are random IPv6 documentation addresses sent as `X-End-User-IP`,
+ *   so reruns start with full save budgets.
+ *
  * The full run: `API_KEYS_ENFORCED=true ARENA_API_URL=http://localhost:4099 npm run dev`.
  */
 import crypto from 'node:crypto';
@@ -73,6 +80,8 @@ const TEST_EMAILS = [ADMIN_EMAIL, MEMBER_EMAIL, DELISTED_EMAIL];
 
 /** API clients this script issues keys to; their keys are deleted, not just revoked, afterwards. */
 const KEY_CLIENT = 'test-mutations';
+const CHIME_FIXTURE_X = -32768;
+const CHIME_FIXTURE_Y = 32767;
 const REVOKED_KEY_CLIENT = 'test-mutations-revoked';
 /** Sent on every request unless a call opts out. Set once the key is issued. */
 let apiKey: string | undefined;
@@ -189,6 +198,15 @@ async function deleteTestKeys(): Promise<number> {
   return (await deleteKeys(KEY_CLIENT)) + (await deleteKeys(REVOKED_KEY_CLIENT));
 }
 
+/** Fixture compositions: the given ids, plus any whose first unit carries the fixture position. */
+async function deleteChimeFixtures(ids: string[] = []): Promise<number> {
+  const { ChimeCompositionModel } = await import('../src/models/chime.js');
+  const result = await ChimeCompositionModel.deleteMany({
+    $or: [{ _id: { $in: ids } }, { 'units.0.x': CHIME_FIXTURE_X, 'units.0.y': CHIME_FIXTURE_Y }],
+  });
+  return result.deletedCount;
+}
+
 async function cleanup(): Promise<void> {
   // Only documents this script creates: marked fixtures, and the .invalid test accounts.
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
@@ -197,9 +215,10 @@ async function cleanup(): Promise<void> {
     const photos = await deleteUploadFixtures();
     const accounts = await deleteAccounts();
     const keys = await deleteTestKeys();
+    const chimes = await deleteChimeFixtures();
     console.log(
       `Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s), ` +
-        `${photos} upload fixture photo(s), ${accounts} test account(s), ${keys} test API key(s).`,
+        `${photos} upload fixture photo(s), ${chimes} fixture composition(s), ${accounts} test account(s), ${keys} test API key(s).`,
     );
   });
 }
@@ -217,13 +236,15 @@ interface RequestOptions {
   key?: string | null;
   /** Claimed client address, trusted by a server on loopback. */
   ip?: string;
+  /** The visitor a keyed request acts for (`X-End-User-IP`). */
+  endUserIp?: string;
 }
 
 async function request<T = any>(
   query: string,
   variables: Record<string, unknown> = {},
   token?: string,
-  { key = apiKey, ip }: RequestOptions = {},
+  { key = apiKey, ip, endUserIp }: RequestOptions = {},
 ): Promise<{ status: number; headers: Headers; body: { data: T | null; errors?: GqlError[] } }> {
   const res = await fetch(API_URL, {
     method: 'POST',
@@ -232,6 +253,7 @@ async function request<T = any>(
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(key ? { 'x-api-key': key } : {}),
       ...(ip ? { 'x-forwarded-for': ip } : {}),
+      ...(endUserIp ? { 'x-end-user-ip': endUserIp } : {}),
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -950,6 +972,108 @@ async function arenaSuite(token: string): Promise<void> {
   check('clearing again is still true', (await ok('mutation { arenaClearUser }', {}, token)).arenaClearUser === true);
 }
 
+// ---------------------------------------------------------------------------
+// Chime compositions
+
+const CHIME_UNIT_FIELDS = 'volume tubes wind decay cutoff resonance root scale voice channel midiMode notes x y rank';
+const SAVE_CHIME = `mutation($input: DmbkSoundSaveChimeCompositionInput!) { dmbkSoundSaveChimeComposition(input: $input) {
+  created chimeComposition { id title unitCount createdAt hidden units { ${CHIME_UNIT_FIELDS} } } chimeCompositionEdge { cursor node { id } } } }`;
+const HIDE_CHIME = `mutation($input: DmbkSoundSetChimeCompositionHiddenInput!) { dmbkSoundSetChimeCompositionHidden(input: $input) { chimeComposition { id hidden } } }`;
+const LIST_CHIMES = `query($first: Int, $after: String) { dmbkSoundChimeCompositions(first: $first, after: $after) {
+  edges { cursor node { id title } } pageInfo { hasNextPage endCursor } } }`;
+const CHIME_NODE = `query($id: ID!) { node(id: $id) { ... on ChimeComposition { id title hidden } } }`;
+
+const visitor = () => `2001:db8::${crypto.randomBytes(6).toString('hex').match(/.{4}/g)!.join(':')}`;
+
+/** A composition no real user has: the first unit sits at the fixture position, with random values. */
+function chimeFixture(count = 2, overrides: Record<string, unknown> = {}) {
+  const r = (n: number) => crypto.randomInt(n);
+  return Array.from({ length: count }, (_, i) => ({
+    volume: r(101), tubes: 2 + r(7), wind: r(101), decay: 3 + r(118), cutoff: r(1001), resonance: 5 + r(176),
+    root: 48 + r(37), scale: i % 2 ? 'PELOG (12-TET)' : 'RYUKYU', channel: 1 + i, midiMode: i % 2 ? 'MONO' : 'POLY',
+    notes: i % 2 === 1, x: i === 0 ? CHIME_FIXTURE_X : 40 * i, y: i === 0 ? CHIME_FIXTURE_Y : -40 * i, rank: i,
+    ...(i === 1 ? { voice: 'v2' } : {}),
+    ...overrides,
+  }));
+}
+
+async function chimeSuite(adminToken: string, memberToken: string): Promise<void> {
+  console.log('\nChime compositions');
+  const created: string[] = [];
+  const save = async (units: unknown[], endUserIp = visitor(), options: RequestOptions = {}) => {
+    const res = await gql(SAVE_CHIME, { input: { units } }, undefined, { endUserIp, ...options });
+    const id = res.data?.dmbkSoundSaveChimeComposition?.chimeComposition?.id;
+    if (id) created.push(localId(id));
+    return res;
+  };
+  const listIds = async (first = 20) =>
+    (await ok(LIST_CHIMES, { first })).dmbkSoundChimeCompositions.edges.map((e: any) => e.node.id) as string[];
+
+  try {
+    const units = chimeFixture(2);
+    const first = await save(units);
+    const saved = first.data?.dmbkSoundSaveChimeComposition;
+    const c = saved?.chimeComposition;
+    check('save: created, with a generated title', saved?.created === true && /^[A-Z0-9 #&'()./+-]{1,40}$/.test(c?.title ?? ''), first);
+    check('save: units come back as given, voice null when omitted', c?.unitCount === 2 &&
+      units.every((u, i) => CHIME_UNIT_FIELDS.split(' ').every((f) => c.units[i][f] === ((u as any)[f] ?? null))), c?.units);
+    check('save: an edge with a cursor for @prependEdge', !!saved?.chimeCompositionEdge?.cursor && saved.chimeCompositionEdge.node.id === c?.id);
+    check('hidden is null for a non-admin', c?.hidden === null, c);
+
+    const again = (await save(units)).data?.dmbkSoundSaveChimeComposition;
+    check('same units again: the stored one, created false, same title', again?.created === false && again.chimeComposition.id === c?.id && again.chimeComposition.title === c?.title, again);
+    const moved = (await save(units.map((u, i) => (i === 1 ? { ...u, x: (u.x as number) + 1 } : u)))).data?.dmbkSoundSaveChimeComposition;
+    check('a moved unit is a new composition', moved?.created === true && moved.chimeComposition.id !== c?.id, moved);
+
+    const refusedSave = async (name: string, bad: unknown[], codes = ['BAD_USER_INPUT']) => {
+      const { data, errors } = await save(bad);
+      const code = errors?.[0]?.extensions?.code;
+      check(`${name} → refused`, !data?.dmbkSoundSaveChimeComposition && !!errors?.length && (code === undefined || codes.includes(code)), errors);
+    };
+    await refusedSave('decay out of range', chimeFixture(1, { decay: 500 }));
+    await refusedSave('unknown scale', chimeFixture(1, { scale: 'NOT-A-SCALE' }));
+    await refusedSave('unknown voice', chimeFixture(1, { voice: 's0:9999' }));
+    await refusedSave('extra field', chimeFixture(1, { foo: 1 }), ['BAD_USER_INPUT', 'GRAPHQL_VALIDATION_FAILED']);
+    await refusedSave('float volume', chimeFixture(1, { volume: 0.5 }), ['BAD_USER_INPUT', 'GRAPHQL_VALIDATION_FAILED']);
+    await refusedSave('no units', []);
+    await refusedSave('17 units', chimeFixture(17).map((u, i) => ({ ...u, channel: 1 + (i % 16), rank: i % 16 })));
+    const keyless = await gql(SAVE_CHIME, { input: { units: chimeFixture(1) } }, undefined, { key: null, ip: freshIp() });
+    check('keyless save → FORBIDDEN', codesOf(keyless.errors)[0] === 'FORBIDDEN', keyless);
+
+    const top = await listIds();
+    check('listing: newest first, includes the saves', top.includes(c?.id) && top.indexOf(moved?.chimeComposition.id) < top.indexOf(c?.id), top.slice(0, 5));
+    const p1 = (await ok(LIST_CHIMES, { first: 1 })).dmbkSoundChimeCompositions;
+    const p2 = (await ok(LIST_CHIMES, { first: 1, after: p1.pageInfo.endCursor })).dmbkSoundChimeCompositions;
+    check('listing: pages follow the cursor', p1.pageInfo.hasNextPage && p2.edges[0]?.node.id !== p1.edges[0].node.id, { p1, p2 });
+    await expectRefused('backward pagination', `{ dmbkSoundChimeCompositions(last: 2) { edges { cursor } } }`, {}, undefined, ['BAD_USER_INPUT']);
+    check('node(id) finds it', (await ok(CHIME_NODE, { id: c?.id })).node?.title === c?.title);
+
+    await expectRefused('member hides', HIDE_CHIME, { input: { id: c?.id, hidden: true } }, memberToken, ['FORBIDDEN']);
+    await expectRefused('anonymous client hides', HIDE_CHIME, { input: { id: c?.id, hidden: true } }, undefined, ['FORBIDDEN']);
+    const hid = (await ok(HIDE_CHIME, { input: { id: c?.id, hidden: true } }, adminToken)).dmbkSoundSetChimeCompositionHidden;
+    check('admin hides', hid.chimeComposition.hidden === true, hid);
+    check('hidden: gone from the listing', !(await listIds(50)).includes(c?.id));
+    check('hidden: node is null for anyone but an admin', (await ok(CHIME_NODE, { id: c?.id })).node === null && (await ok(CHIME_NODE, { id: c?.id }, memberToken)).node === null);
+    check('hidden: an admin still sees it', (await ok(CHIME_NODE, { id: c?.id }, adminToken)).node?.hidden === true);
+    const dupHidden = (await save(units)).data?.dmbkSoundSaveChimeComposition;
+    check('saving a hidden composition again does not re-list it', dupHidden?.created === false && !(await listIds(50)).includes(c?.id), dupHidden);
+    await ok(HIDE_CHIME, { input: { id: c?.id, hidden: false } }, adminToken);
+    check('unhidden: back in the listing', (await listIds(50)).includes(c?.id));
+    await expectRefused('hiding a missing composition', HIDE_CHIME, { input: { id: globalId('ChimeComposition', '0'.repeat(24)), hidden: true } }, adminToken, ['NOT_FOUND']);
+
+    const limit = Number(process.env.CHIME_SAVE_RATE_LIMIT ?? 10);
+    const busy = visitor();
+    let okSaves = 0;
+    for (let i = 0; i < limit; i++) if ((await save(chimeFixture(1), busy)).data?.dmbkSoundSaveChimeComposition) okSaves++;
+    const over = await save(chimeFixture(1), busy);
+    check(`one visitor: ${limit} saves, then RATE_LIMITED with a retry time`, okSaves === limit && codesOf(over.errors)[0] === 'RATE_LIMITED' &&
+      Number(over.errors?.[0]?.extensions && (over.errors[0].extensions as any).retryAfterSeconds) > 0, over.errors);
+    check('another visitor can still save', !!(await save(chimeFixture(1))).data?.dmbkSoundSaveChimeComposition);
+  } finally {
+    await deleteChimeFixtures(created).catch((e) => console.error('  ! composition cleanup failed (run --cleanup):', e));
+  }
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes('--setup')) return setup();
 
@@ -1010,6 +1134,7 @@ async function main(): Promise<void> {
     await loraSuite(admin.id, admin.token, accounts[MEMBER_EMAIL].token);
     await loraWritesSuite(admin.id, admin.token, accounts[MEMBER_EMAIL].token);
     await uploadSuite(admin.token, accounts[MEMBER_EMAIL].token);
+    await chimeSuite(admin.token, accounts[MEMBER_EMAIL].token);
     const stub = await startArenaStub();
     try {
       await arenaSuite(accounts[MEMBER_EMAIL].token);

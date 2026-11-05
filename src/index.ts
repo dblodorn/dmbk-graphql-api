@@ -26,8 +26,9 @@ async function main() {
     context: async ({ request }) => {
       const access = accessFor(request);
       const client = access.kind === 'client' ? access.client : null;
+      const endUserIp = access.kind === 'client' ? access.endUserIp : null;
       const viewer = access.kind === 'playground' ? null : await getViewerFromRequest(request);
-      return createContext(request, viewer, client);
+      return createContext(request, viewer, client, endUserIp);
     },
     plugins: [useApiAccess()],
     graphiql: {

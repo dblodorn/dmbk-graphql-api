@@ -10,6 +10,8 @@ import { SoundSnapshotRef } from './types/sound.js';
 import { ViewerRef } from './types/viewer.js';
 import { ArenaChannelRef } from './types/arena.js';
 import { getChannel } from '../lib/arena/client.js';
+import { listVisibleCompositions } from '../lib/chime/repository.js';
+import { ChimeCompositionRef } from './types/chime.js';
 
 builder.queryType({});
 
@@ -82,6 +84,14 @@ builder.queryField('dmbkSoundPlaylists', (t) =>
     nullable: true,
     description: 'The latest cached SoundCloud playlists snapshot.',
     resolve: () => SoundSnapshotModel.findById('playlists').lean<SoundSnapshotDoc>().exec(),
+  }),
+);
+
+builder.queryField('dmbkSoundChimeCompositions', (t) =>
+  t.connection({
+    type: ChimeCompositionRef,
+    description: 'Saved windchime compositions that are not hidden, newest first.',
+    resolve: async (_root, args) => toConnection(await listVisibleCompositions(args)),
   }),
 );
 
