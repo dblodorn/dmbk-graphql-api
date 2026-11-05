@@ -22,7 +22,8 @@
 
 - [x] 4.1 Add `scripts/backfill-models.ts` and `"backfill:models"` in `package.json`, modeled on `backfill-owner-id.ts`: report-only by default, `--apply` to `$set` the legacy values where the field is missing, with counts before and after. Verify with `npm run typecheck` and a report-only run that prints the counts and writes nothing.
   - Report-only run on 2026-10-28: 18 trainings and 368 images without a model, nothing written. Matches `$exists: false`, `null` and `''`, as `backfill-owner-id.ts` does.
-- [ ] 4.2 After deploy, run `npm run backfill:models -- --apply` against production, then once more without `--apply`. Verify that the second run reports 0 trainings and 0 images missing a model, and record the counts here.
+- [x] 4.2 After deploy, run `npm run backfill:models -- --apply` against production, then once more without `--apply`. Verify that the second run reports 0 trainings and 0 images missing a model, and record the counts here.
+  - Applied 2026-10-28 after #30 deployed: set `fal-ai/flux-lora-fast-training` on 18 trainings and `fal-ai/flux-lora` on 368 images. The report-only re-run found 0 and 0.
 
 ## 5. Mutation tests
 
