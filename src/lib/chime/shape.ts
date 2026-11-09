@@ -20,7 +20,7 @@ export const INT_FIELDS = {
   decay: [3, 120], // tenths of a second
   cutoff: [0, 1000], // FREQUENCY slider × 1000
   resonance: [5, 180], // × 10
-  root: [48, 84], // MIDI note
+  root: [0, 119], // MIDI note (C-1 to B8)
   channel: [1, 16],
   x: [-32768, 32767],
   y: [-32768, 32767],
