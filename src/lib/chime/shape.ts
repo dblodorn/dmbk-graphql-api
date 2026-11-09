@@ -29,7 +29,13 @@ export const INT_FIELDS = {
 
 export const MIDI_MODES = ['poly', 'mono'] as const;
 
-/** Every unit field, in the canonical order the fingerprint hashes them. */
+/** `chime` is the tube chime, `furin` the furin bell. Optional in storage: a unit without it is a tube chime. */
+export const INSTRUMENTS = ['chime', 'furin'] as const;
+export type Instrument = (typeof INSTRUMENTS)[number];
+
+export const DEFAULT_INSTRUMENT: Instrument = 'chime';
+
+/** Every required unit field, in the canonical order the fingerprint hashes them (`instrument` is not one, see fingerprint.ts). */
 export const UNIT_FIELDS = [
   'volume', 'tubes', 'wind', 'decay', 'cutoff', 'resonance', 'root',
   'scale', 'voice', 'channel', 'midiMode', 'notes', 'x', 'y', 'rank',
@@ -51,6 +57,8 @@ export interface ChimeUnit {
   x: number;
   y: number;
   rank: number;
+  /** Missing on units saved before it existed. */
+  instrument?: Instrument;
 }
 
 const int = ([min, max]: readonly [number, number]) => z.int().min(min).max(max);
@@ -76,12 +84,13 @@ export const UnitInputSchema = z
     x: int(INT_FIELDS.x),
     y: int(INT_FIELDS.y),
     rank: int(INT_FIELDS.rank),
+    instrument: z.enum(INSTRUMENTS).nullish().transform((v) => v ?? DEFAULT_INSTRUMENT), // GraphQL may send null for omitted
   })
   .strict();
 
 export const UnitsInputSchema = z.array(UnitInputSchema).min(1).max(MAX_UNITS);
 
-/** The collection validator: document and unit, every field required, nothing else allowed. */
+/** The collection validator: document and unit, every field but `instrument` required, nothing else allowed. */
 export function compositionJsonSchema(): Record<string, unknown> {
   const intProps = Object.fromEntries(
     Object.entries(INT_FIELDS).map(([name, [minimum, maximum]]) => [name, { bsonType: 'int', minimum, maximum }]),
@@ -96,6 +105,8 @@ export function compositionJsonSchema(): Record<string, unknown> {
       voice: { bsonType: ['string', 'null'], enum: [null, ...VOICE_IDS] },
       midiMode: { bsonType: 'string', enum: [...MIDI_MODES] },
       notes: { bsonType: 'bool' },
+      // allowed, not required: units stored before it existed stay valid
+      instrument: { bsonType: 'string', enum: [...INSTRUMENTS] },
     },
   };
   return {

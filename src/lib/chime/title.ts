@@ -34,8 +34,8 @@ function random(seed: number): () => number {
 }
 
 /** Voice display names without parenthesised parts, version tags or the font's `TB` (Tim Brechbill) tag. */
-export function instrumentWord(voice: string | null): string {
-  const name = voiceName(voice)
+export function instrumentWord(voice: string | null, instrument?: string): string {
+  const name = voiceName(voice, instrument)
     .toUpperCase()
     .replace(/\([^)]*\)/g, ' ')
     .replace(/\bV\d+(\.\d+)*\b/g, ' ')
@@ -54,8 +54,11 @@ export function compositionTitle(units: readonly ChimeUnit[], fingerprint: strin
   const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)];
 
   const keyUnit = pick(units);
-  const key = `${NOTES[keyUnit.root % 12]} ${keyUnit.scale}`;
-  const instrument = instrumentWord(pick(units).voice);
+  // a furin plays its root alone, so its key is just the note
+  const note = NOTES[keyUnit.root % 12];
+  const key = keyUnit.instrument === 'furin' ? note : `${note} ${keyUnit.scale}`;
+  const voiceUnit = pick(units);
+  const instrument = instrumentWord(voiceUnit.voice, voiceUnit.instrument);
   const template = pick(TEMPLATES);
 
   // Too long: drop the ensemble word, then cut the instrument to its first word.
