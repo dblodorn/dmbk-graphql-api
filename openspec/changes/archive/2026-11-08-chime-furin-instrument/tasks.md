@@ -29,5 +29,5 @@
 
 ## 5. Rollout (by hand)
 
-- [ ] 5.1 Run `npm run chime:collection -- --apply` as a user with `dbAdmin` on `dmbk-sound`, **before merging**.
-- [ ] 5.2 Merge, which deploys. Then run `pnpm schema:pull` in windchime.
+- [x] 5.1 Run `npm run chime:collection -- --apply` as a user with `dbAdmin` on `dmbk-sound`, **before merging**.
+- [x] 5.2 Merge, which deploys. Then run `pnpm schema:pull` in windchime.
