@@ -12,4 +12,4 @@
 ## 2. Docs and rollout
 
 - [x] 2.1 Update CLAUDE.md wherever it names the range.
-- [ ] 2.2 After merging: run `npm run chime:collection -- --apply` (with `dbAdmin`), then deploy.
+- [x] 2.2 After merging: run `npm run chime:collection -- --apply` (with `dbAdmin`), then deploy.

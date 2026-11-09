@@ -13,7 +13,7 @@ Compositions SHALL be stored in the `chime_compositions` collection of the `dmbk
 - `decay`: integer 3–120 (tenths of a second)
 - `cutoff`: integer 0–1000 (the FREQUENCY slider ×1000)
 - `resonance`: integer 5–180 (×10)
-- `root`: integer 48–84 (MIDI note)
+- `root`: integer 0–119 (MIDI note, C-1 to B8)
 - `scale`: a scale name from the catalog
 - `voice`: null or a voice id from the catalog
 - `channel`: integer 1–16
@@ -37,6 +37,10 @@ The collection SHALL carry a database-level schema validator, at strict level wi
 #### Scenario: Older document without an instrument
 - **WHEN** a composition stored before `instrument` existed is listed or loaded
 - **THEN** each of its units is returned with `instrument: CHIME`, and the document is otherwise unchanged
+
+#### Scenario: Full root range
+- **WHEN** a composition whose units have `root: 0` and `root: 119` is saved
+- **THEN** it is stored, and a unit with `root: 120` or `root: -1` is refused
 
 ### Requirement: Voice and scale catalog
 The API SHALL hold a catalog of windchime's scale names and voice ids, each voice with a display name. The catalog SHALL include windchime's built-in FURIN voice, `v6`. The catalog SHALL only grow at the end, matching windchime's rule that scales and presets travel as indices, so every stored composition stays valid. A save SHALL be refused when a unit's `scale` is not in the catalog, or its `voice` is neither null nor in the catalog.
