@@ -42,6 +42,7 @@ const unitSchema = new Schema<ChimeUnit>(
     x: Number,
     y: Number,
     rank: Number,
+    instrument: String,
   },
   { _id: false, strict: true },
 );

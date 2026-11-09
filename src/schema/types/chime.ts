@@ -1,6 +1,6 @@
 import { builder } from '../builder.js';
 import type { ChimeCompositionDoc } from '../../models/chime.js';
-import { INT_FIELDS, MAX_UNITS, type ChimeUnit } from '../../lib/chime/shape.js';
+import { DEFAULT_INSTRUMENT, INT_FIELDS, MAX_UNITS, type ChimeUnit } from '../../lib/chime/shape.js';
 import { cursorFor } from '../../lib/cursor.js';
 
 /*
@@ -14,6 +14,14 @@ export const ChimeMidiModeEnum = builder.enumType('ChimeMidiMode', {
   values: {
     POLY: { value: 'poly' },
     MONO: { value: 'mono' },
+  } as const,
+});
+
+export const ChimeInstrumentEnum = builder.enumType('ChimeInstrument', {
+  description: 'The instrument a unit is: the tube chime, or the furin bell (one note, its root).',
+  values: {
+    CHIME: { value: 'chime' },
+    FURIN: { value: 'furin' },
   } as const,
 });
 
@@ -54,11 +62,16 @@ export const ChimeUnitRef = builder.objectRef<ChimeUnit>('ChimeUnit').implement(
     x: t.exposeInt('x', { description: DESCRIPTIONS.x }),
     y: t.exposeInt('y', { description: DESCRIPTIONS.y }),
     rank: t.exposeInt('rank', { description: DESCRIPTIONS.rank }),
+    instrument: t.field({
+      type: ChimeInstrumentEnum,
+      description: 'CHIME for units saved before instruments existed.',
+      resolve: (u) => u.instrument ?? DEFAULT_INSTRUMENT,
+    }),
   }),
 });
 
 export const ChimeUnitInputRef = builder.inputType('ChimeUnitInput', {
-  description: 'One chime to save. Every field is required except `voice`.',
+  description: 'One chime to save. Every field is required except `voice` and `instrument`.',
   fields: (t) => ({
     volume: t.int({ required: true, description: DESCRIPTIONS.volume }),
     tubes: t.int({ required: true, description: DESCRIPTIONS.tubes }),
@@ -75,6 +88,7 @@ export const ChimeUnitInputRef = builder.inputType('ChimeUnitInput', {
     x: t.int({ required: true, description: DESCRIPTIONS.x }),
     y: t.int({ required: true, description: DESCRIPTIONS.y }),
     rank: t.int({ required: true, description: DESCRIPTIONS.rank }),
+    instrument: t.field({ type: ChimeInstrumentEnum, description: 'Omitted means CHIME.' }),
   }),
 });
 
