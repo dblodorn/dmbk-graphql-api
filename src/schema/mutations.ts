@@ -20,6 +20,9 @@ import { clearArenaProfile, setArenaProfile } from '../lib/arena/profile.js';
 import { saveComposition, setCompositionHidden } from '../lib/chime/repository.js';
 import { takeSave } from '../lib/chime/limits.js';
 import { ChimeCompositionEdgeRef, ChimeCompositionRef, ChimeUnitInputRef } from './types/chime.js';
+import { deleteVoice, saveVoice, setVoiceHidden, updateVoice } from '../lib/vz/repository.js';
+import { takeWrite } from '../lib/vz/limits.js';
+import { VzVoiceEdgeRef, VzVoiceRef } from './types/vz.js';
 
 /*
  * Every mutation here is a Relay input-object mutation: one `input` argument,
@@ -464,6 +467,110 @@ builder.relayMutationField(
   {
     outputFields: (t) => ({
       chimeComposition: t.field({ type: ChimeCompositionRef, resolve: (payload) => payload.composition }),
+    }),
+  },
+);
+
+// ---------------------------------------------------------------------------
+// dmbk-sound: VZ-10M voices (vz10m)
+
+const VZ_DATA = 'The 336 decoded voice bytes as base64 (448 characters). The name is read from them.';
+const VZ_KEY = "The saving browser's device key (32 random bytes, base64url). Only its hash is stored.";
+
+/** Writes come only from a client app's server, which also forwards the visitor for the rate limit. */
+function vzWrite(context: { client: string | null; endUserIp: string | null }): void {
+  if (context.client === null) throw forbidden('Changing VZ voices requires a client API key.');
+  takeWrite(context.client, context.endUserIp);
+}
+
+builder.relayMutationField(
+  'dmbkSoundSaveVzVoice',
+  {
+    inputFields: (t) => ({
+      data: t.string({ required: true, description: VZ_DATA }),
+      creatorKey: t.string({ required: true, description: VZ_KEY }),
+    }),
+  },
+  {
+    description:
+      'Save a voice anonymously under a device key. The same key saving identical bytes again returns the stored voice with `created: false`. Obscene names are refused (BAD_USER_INPUT). Rate-limited per visitor (`X-End-User-IP`) and per client.',
+    resolve: async (_root, { input }, context) => {
+      vzWrite(context);
+      return saveVoice(input.data, input.creatorKey);
+    },
+  },
+  {
+    outputFields: (t) => ({
+      vzVoice: t.field({ type: VzVoiceRef, resolve: (payload) => payload.voice }),
+      vzVoiceEdge: t.field({ type: VzVoiceEdgeRef, resolve: (payload) => payload.voice }),
+      created: t.boolean({ resolve: (payload) => payload.created }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundUpdateVzVoice',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: VzVoiceRef }),
+      data: t.string({ required: true, description: VZ_DATA }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the voice.' }),
+    }),
+  },
+  {
+    description: "Replace a voice's bytes (renaming it too, since the name is in them). Only the device key that saved it may; others get FORBIDDEN.",
+    resolve: async (_root, { input }, context) => {
+      vzWrite(context);
+      return { voice: await updateVoice(input.id.id, input.data, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      vzVoice: t.field({ type: VzVoiceRef, resolve: (payload) => payload.voice }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundDeleteVzVoice',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: VzVoiceRef }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the voice.' }),
+    }),
+  },
+  {
+    description: 'Delete a voice for good. Only the device key that saved it may; others get FORBIDDEN.',
+    resolve: async (_root, { input }, context) => {
+      vzWrite(context);
+      return { id: await deleteVoice(input.id.id, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      deletedVzVoiceId: t.globalID({
+        description: 'The deleted voice, for `@deleteRecord`.',
+        resolve: (payload) => ({ type: 'VzVoice', id: payload.id }),
+      }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundSetVzVoiceHidden',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: VzVoiceRef }),
+      hidden: t.boolean({ required: true }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => ({ voice: await setVoiceHidden(input.id.id, input.hidden) }),
+  },
+  {
+    outputFields: (t) => ({
+      vzVoice: t.field({ type: VzVoiceRef, resolve: (payload) => payload.voice }),
     }),
   },
 );

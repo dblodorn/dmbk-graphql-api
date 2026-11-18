@@ -4,9 +4,11 @@ import type { Viewer } from './auth/viewer.js';
 import type { PhotoDoc } from './models/photos.js';
 import type { GeneratedImageDoc, LoraTrainingDoc } from './models/lora.js';
 import type { ChimeCompositionDoc } from './models/chime.js';
+import type { VzVoiceDoc } from './models/vz.js';
 import { ADMIN_SCOPE, PUBLIC_SCOPE, loadPhotos } from './lib/photos/repository.js';
 import { loadImages, loadTrainings } from './lib/lora/repository.js';
 import { loadCompositions } from './lib/chime/repository.js';
+import { loadVoices } from './lib/vz/repository.js';
 
 export interface ContextType {
   /** The incoming request; `signOut` needs its bearer token. */
@@ -25,6 +27,7 @@ export interface ContextType {
   trainingLoader: DataLoader<string, LoraTrainingDoc | null>;
   imageLoader: DataLoader<string, GeneratedImageDoc | null>;
   compositionLoader: DataLoader<string, ChimeCompositionDoc | null>;
+  vzVoiceLoader: DataLoader<string, VzVoiceDoc | null>;
 }
 
 export function createContext(
@@ -43,6 +46,7 @@ export function createContext(
     trainingLoader: new DataLoader((ids) => loadTrainings(ids, viewer)),
     imageLoader: new DataLoader((ids) => loadImages(ids, viewer)),
     compositionLoader: new DataLoader((ids) => loadCompositions(ids, viewer?.isAdmin === true)),
+    vzVoiceLoader: new DataLoader((ids) => loadVoices(ids, viewer?.isAdmin === true)),
     ...initContextCache(),
   };
 }

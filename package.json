@@ -13,6 +13,7 @@
     "backfill:models": "tsx --env-file=.env scripts/backfill-models.ts",
     "move:sound-snapshots": "tsx --env-file=.env scripts/move-sound-snapshots.ts",
     "chime:collection": "tsx --env-file=.env scripts/chime-compositions-collection.ts",
+    "vz:collection": "tsx --env-file=.env scripts/vz-voices-collection.ts",
     "api-client": "tsx --env-file=.env scripts/api-clients.ts"
   },
   "keywords": [],
@@ -30,6 +31,7 @@
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.24.6",
     "mongoose": "^9.11.0",
+    "obscenity": "^0.4.5",
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"
