@@ -58,6 +58,11 @@
  *   Visitors are random IPv6 documentation addresses sent as `X-End-User-IP`,
  *   so reruns start with full save budgets.
  *
+ * - VZ voices: saved, listed, updated, hidden and deleted through the
+ *   mutations under two fixed test device keys (TEST_VZ_KEY_A / _B), which
+ *   `--cleanup` finds by their hashes. Each is public between its save and the
+ *   cleanup. Visitors are random IPv6 addresses, as for chime.
+ *
  * The full run: `API_KEYS_ENFORCED=true ARENA_API_URL=http://localhost:4099 npm run dev`.
  */
 import crypto from 'node:crypto';
@@ -207,6 +212,17 @@ async function deleteChimeFixtures(ids: string[] = []): Promise<number> {
   return result.deletedCount;
 }
 
+// Fixed device keys for the VZ-voice suite: 43 base64url characters each.
+const TEST_VZ_KEY_A = 'test-vz-creator-a-0000000000000000000000000';
+const TEST_VZ_KEY_B = 'test-vz-creator-b-0000000000000000000000000';
+
+async function deleteVzFixtures(): Promise<number> {
+  const { VzVoiceModel } = await import('../src/models/vz.js');
+  const { creatorHash } = await import('../src/lib/vz/shape.js');
+  const result = await VzVoiceModel.deleteMany({ creatorHash: { $in: [creatorHash(TEST_VZ_KEY_A), creatorHash(TEST_VZ_KEY_B)] } });
+  return result.deletedCount;
+}
+
 async function cleanup(): Promise<void> {
   // Only documents this script creates: marked fixtures, and the .invalid test accounts.
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
@@ -216,9 +232,11 @@ async function cleanup(): Promise<void> {
     const accounts = await deleteAccounts();
     const keys = await deleteTestKeys();
     const chimes = await deleteChimeFixtures();
+    const voices = await deleteVzFixtures();
     console.log(
       `Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s), ` +
-        `${photos} upload fixture photo(s), ${chimes} fixture composition(s), ${accounts} test account(s), ${keys} test API key(s).`,
+        `${photos} upload fixture photo(s), ${chimes} fixture composition(s), ${voices} fixture VZ voice(s), ` +
+        `${accounts} test account(s), ${keys} test API key(s).`,
     );
   });
 }
@@ -1074,6 +1092,109 @@ async function chimeSuite(adminToken: string, memberToken: string): Promise<void
   }
 }
 
+// ---------------------------------------------------------------------------
+// VZ voices
+
+const VZ_FIELDS = 'id name data createdAt updatedAt hidden';
+const SAVE_VZ = `mutation($input: DmbkSoundSaveVzVoiceInput!, $key: String!) { dmbkSoundSaveVzVoice(input: $input) {
+  created vzVoice { ${VZ_FIELDS} yours(creatorKey: $key) } vzVoiceEdge { cursor node { id } } } }`;
+const UPDATE_VZ = `mutation($input: DmbkSoundUpdateVzVoiceInput!) { dmbkSoundUpdateVzVoice(input: $input) { vzVoice { ${VZ_FIELDS} } } }`;
+const DELETE_VZ = `mutation($input: DmbkSoundDeleteVzVoiceInput!) { dmbkSoundDeleteVzVoice(input: $input) { deletedVzVoiceId } }`;
+const HIDE_VZ = `mutation($input: DmbkSoundSetVzVoiceHiddenInput!) { dmbkSoundSetVzVoiceHidden(input: $input) { vzVoice { id hidden } } }`;
+const LIST_VZ = `query($first: Int, $after: String, $creatorKey: String, $search: String, $key: String!) {
+  dmbkSoundVzVoices(first: $first, after: $after, creatorKey: $creatorKey, search: $search) {
+    edges { cursor node { id name yours(creatorKey: $key) } } pageInfo { hasNextPage endCursor } } }`;
+const VZ_NODE = `query($id: ID!) { node(id: $id) { ... on VzVoice { id name hidden } } }`;
+
+/** 336 voice bytes as base64, with `name` at offset 322 and a random body so each call differs. */
+function vzVoice(name: string, seed = crypto.randomBytes(8)): string {
+  const bytes = Buffer.alloc(336);
+  seed.copy(bytes, 0);
+  Buffer.from(name.padEnd(12, ' ').slice(0, 12), 'ascii').copy(bytes, 322);
+  return bytes.toString('base64');
+}
+
+async function vzSuite(adminToken: string, memberToken: string): Promise<void> {
+  console.log('\nVZ voices');
+  const A = TEST_VZ_KEY_A, B = TEST_VZ_KEY_B;
+  const save = (data: string, creatorKey = A, endUserIp = visitor(), options: RequestOptions = {}) =>
+    gql(SAVE_VZ, { input: { data, creatorKey }, key: creatorKey }, undefined, { endUserIp, ...options });
+  const write = (query: string, input: Record<string, unknown>) => gql(query, { input }, undefined, { endUserIp: visitor() });
+  const list = async (vars: Record<string, unknown> = {}) =>
+    (await ok(LIST_VZ, { first: 50, key: A, ...vars })).dmbkSoundVzVoices.edges.map((e: any) => e.node) as { id: string; name: string; yours: boolean }[];
+
+  try {
+    const data = vzVoice('TEST ORGAN');
+    const first = (await save(data)).data?.dmbkSoundSaveVzVoice;
+    const v = first?.vzVoice;
+    check('save: created, the name read from the bytes', first?.created === true && v?.name === 'TEST ORGAN', first);
+    check('save: the bytes come back as given', v?.data === data);
+    check('save: yours for its key, an edge with a cursor', v?.yours === true && first?.vzVoiceEdge?.node?.id === v?.id && !!first?.vzVoiceEdge?.cursor);
+    check('save: createdAt = updatedAt, hidden null for a non-admin', v?.createdAt === v?.updatedAt && v?.hidden === null, v);
+
+    const again = (await save(data)).data?.dmbkSoundSaveVzVoice;
+    check('same key, same bytes: the stored one, created false', again?.created === false && again.vzVoice.id === v?.id, again);
+    const other = (await save(data, B)).data?.dmbkSoundSaveVzVoice;
+    check('another key, same bytes: a new voice, not yours for A', other?.created === true && other.vzVoice.id !== v?.id &&
+      (await list()).find((x) => x.id === other.vzVoice.id)?.yours === false, other);
+
+    const refused = async (name: string, res: Promise<{ data?: any; errors?: GqlError[] }>, codes = ['BAD_USER_INPUT']) => {
+      const { errors } = await res;
+      check(`${name} → ${codes.join('/')}`, codes.includes(codesOf(errors)[0] ?? ''), errors);
+    };
+    await refused('obscene name', save(vzVoice('5H1T PAD')));
+    await refused('spelled-out obscene name', save(vzVoice('F U C K')));
+    await refused('data not 336 bytes', save(Buffer.alloc(100).toString('base64')));
+    await refused('data not base64', save('!'.repeat(448)));
+    await refused('malformed device key', save(vzVoice('TEST KEY'), 'short'));
+    const keyless = await gql(SAVE_VZ, { input: { data: vzVoice('TEST KEYLESS'), creatorKey: A }, key: A }, undefined, { key: null, ip: freshIp() });
+    check('keyless save → FORBIDDEN', codesOf(keyless.errors)[0] === 'FORBIDDEN', keyless);
+
+    const all = await list();
+    check('listing: includes the saves, newest first', all.findIndex((x) => x.id === other?.vzVoice.id) < all.findIndex((x) => x.id === v?.id) && all.some((x) => x.id === v?.id), all.slice(0, 3));
+    const mine = await list({ creatorKey: A });
+    check("creatorKey: only that key's voices", mine.some((x) => x.id === v?.id) && !mine.some((x) => x.id === other?.vzVoice.id) && mine.every((x) => x.yours), mine);
+    check('search: names containing the text, any case', (await list({ search: 'test org' })).some((x) => x.id === v?.id) && !(await list({ search: 'NO SUCH NAME' })).length);
+    await expectRefused('search over 12 characters', LIST_VZ, { search: 'A'.repeat(13), key: A }, undefined, ['BAD_USER_INPUT']);
+    const p1 = (await ok(LIST_VZ, { first: 1, key: A })).dmbkSoundVzVoices;
+    const p2 = (await ok(LIST_VZ, { first: 1, after: p1.pageInfo.endCursor, key: A })).dmbkSoundVzVoices;
+    check('listing: pages follow the cursor', p1.pageInfo.hasNextPage && p2.edges[0]?.node.id !== p1.edges[0].node.id, { p1, p2 });
+
+    const renamed = vzVoice('TEST RENAMED');
+    const upd = (await write(UPDATE_VZ, { id: v?.id, data: renamed, creatorKey: A })).data?.dmbkSoundUpdateVzVoice?.vzVoice;
+    check('update by its key: new bytes and name, same createdAt, later updatedAt', upd?.name === 'TEST RENAMED' && upd.data === renamed &&
+      upd.createdAt === v?.createdAt && upd.updatedAt > v.updatedAt, upd);
+    await refused('update by another key', write(UPDATE_VZ, { id: v?.id, data: vzVoice('TEST X'), creatorKey: B }), ['FORBIDDEN']);
+    await refused('update to an obscene name', write(UPDATE_VZ, { id: v?.id, data: vzVoice('CUNT BELL'), creatorKey: A }));
+    const twin = (await save(vzVoice('TEST TWIN'))).data?.dmbkSoundSaveVzVoice?.vzVoice;
+    await refused('update to bytes the key already saved', write(UPDATE_VZ, { id: twin?.id, data: renamed, creatorKey: A }));
+
+    await expectRefused('member hides', HIDE_VZ, { input: { id: v?.id, hidden: true } }, memberToken, ['FORBIDDEN']);
+    const hid = (await ok(HIDE_VZ, { input: { id: v?.id, hidden: true } }, adminToken)).dmbkSoundSetVzVoiceHidden;
+    check('admin hides', hid.vzVoice.hidden === true, hid);
+    check('hidden: gone from the listing and from node()', !(await list()).some((x) => x.id === v?.id) && (await ok(VZ_NODE, { id: v?.id })).node === null);
+    await refused('hidden: its owner can no longer update it', write(UPDATE_VZ, { id: v?.id, data: vzVoice('TEST Y'), creatorKey: A }), ['NOT_FOUND']);
+    await ok(HIDE_VZ, { input: { id: v?.id, hidden: false } }, adminToken);
+    check('unhidden: back in the listing', (await list()).some((x) => x.id === v?.id));
+
+    await refused('delete by another key', write(DELETE_VZ, { id: v?.id, creatorKey: B }), ['FORBIDDEN']);
+    const del = (await write(DELETE_VZ, { id: v?.id, creatorKey: A })).data?.dmbkSoundDeleteVzVoice;
+    check('delete by its key: returns its id; gone everywhere', del?.deletedVzVoiceId === v?.id && (await ok(VZ_NODE, { id: v?.id })).node === null &&
+      !(await list()).some((x) => x.id === v?.id), del);
+    await refused('deleting it again', write(DELETE_VZ, { id: v?.id, creatorKey: A }), ['NOT_FOUND']);
+
+    const limit = Number(process.env.VZ_WRITE_RATE_LIMIT ?? 60);
+    const busy = visitor();
+    let okWrites = 0;
+    for (let i = 0; i < limit; i++) if ((await save(vzVoice('TEST LIMIT'), A, busy)).data?.dmbkSoundSaveVzVoice) okWrites++;
+    const over = await save(vzVoice('TEST LIMIT'), A, busy);
+    check(`one visitor: ${limit} writes, then RATE_LIMITED with a retry time`, okWrites === limit && codesOf(over.errors)[0] === 'RATE_LIMITED' &&
+      Number((over.errors?.[0]?.extensions as any)?.retryAfterSeconds) > 0, over.errors);
+  } finally {
+    await deleteVzFixtures().catch((e) => console.error('  ! VZ voice cleanup failed (run --cleanup):', e));
+  }
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes('--setup')) return setup();
 
@@ -1135,6 +1256,7 @@ async function main(): Promise<void> {
     await loraWritesSuite(admin.id, admin.token, accounts[MEMBER_EMAIL].token);
     await uploadSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await chimeSuite(admin.token, accounts[MEMBER_EMAIL].token);
+    await vzSuite(admin.token, accounts[MEMBER_EMAIL].token);
     const stub = await startArenaStub();
     try {
       await arenaSuite(accounts[MEMBER_EMAIL].token);

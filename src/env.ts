@@ -76,6 +76,15 @@ export const env = {
     dailyLimit: positiveInt('CHIME_SAVE_DAILY_LIMIT', 500),
   },
 
+  /** Anonymous VZ-voice writes: saves, updates, deletes (`lib/vz/limits.ts`). */
+  vzWrites: {
+    /** Writes per visitor (client + forwarded IP) per window, refilled evenly. */
+    rateLimit: positiveInt('VZ_WRITE_RATE_LIMIT', 60),
+    rateWindowSeconds: positiveInt('VZ_WRITE_RATE_WINDOW_SECONDS', 3600),
+    /** Writes per client per day, whatever the visitor. */
+    dailyLimit: positiveInt('VZ_WRITE_DAILY_LIMIT', 2000),
+  },
+
   mongoUri: required('MONGODB_URI'),
   /** Owned by the dmbk app. This API reads it and performs curation writes. */
   photosDbName: process.env.PHOTOS_DB_NAME || 'dmbk-photos',
@@ -83,7 +92,7 @@ export const env = {
   loraDbName: process.env.LORA_DB_NAME || 'lora-trainer',
   /**
    * Owned per collection: dmbk owns `sound_snapshots` (read-only here), this
-   * API owns `chime_compositions`.
+   * API owns `chime_compositions` and `vz_voices`.
    */
   soundDbName: process.env.SOUND_DB_NAME || 'dmbk-sound',
 

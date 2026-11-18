@@ -12,6 +12,8 @@ import { ArenaChannelRef } from './types/arena.js';
 import { getChannel } from '../lib/arena/client.js';
 import { listVisibleCompositions } from '../lib/chime/repository.js';
 import { ChimeCompositionRef } from './types/chime.js';
+import { listVisibleVoices } from '../lib/vz/repository.js';
+import { VzVoiceRef } from './types/vz.js';
 
 builder.queryType({});
 
@@ -92,6 +94,18 @@ builder.queryField('dmbkSoundChimeCompositions', (t) =>
     type: ChimeCompositionRef,
     description: 'Saved windchime compositions that are not hidden, newest first.',
     resolve: async (_root, args) => toConnection(await listVisibleCompositions(args)),
+  }),
+);
+
+builder.queryField('dmbkSoundVzVoices', (t) =>
+  t.connection({
+    type: VzVoiceRef,
+    description: 'Saved VZ voices that are not hidden, newest first. `creatorKey` narrows them to that device key\'s voices; `search` to names containing the text.',
+    args: {
+      creatorKey: t.arg.string({ description: 'A device key: only the voices it saved.' }),
+      search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 12 characters.' }),
+    },
+    resolve: async (_root, args) => toConnection(await listVisibleVoices(args, { creatorKey: args.creatorKey, search: args.search })),
   }),
 );
 
