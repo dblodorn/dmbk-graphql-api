@@ -9,6 +9,8 @@ export interface Viewer {
   id: string;
   email: string;
   name: string | null;
+  /** The Google profile picture better-auth stored at sign-up, or null. */
+  image: string | null;
   /** From ADMIN_EMAILS on every request, never stored with the session. */
   isAdmin: boolean;
 }
@@ -26,11 +28,22 @@ function bearerHeaders(request: Request): Headers | null {
   return new Headers({ authorization: header });
 }
 
-function viewerFor(user: { id: string; email: string; name?: string | null }): Viewer | null {
+function viewerFor(user: {
+  id: string;
+  email: string;
+  name?: string | null;
+  image?: string | null;
+}): Viewer | null {
   // A user removed from ALLOWED_EMAILS keeps their record; this is what
   // shuts them out from their next request.
   if (!isAllowedEmail(user.email)) return null;
-  return { id: user.id, email: user.email, name: user.name || null, isAdmin: isAdminEmail(user.email) };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name || null,
+    image: user.image || null,
+    isAdmin: isAdminEmail(user.email),
+  };
 }
 
 /**
