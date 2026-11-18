@@ -7,7 +7,7 @@ Defines where the cached SoundCloud playlists snapshot lives (`dmbk-sound`, a da
 ## Requirements
 
 ### Requirement: Sound data lives in dmbk-sound
-The SoundCloud playlists snapshot SHALL be stored in the `sound_snapshots` collection of the `dmbk-sound` database, as the single document `_id: "playlists"`. Its fields are `playlists` (the SoundCloud playlists, stored verbatim), `fetchedAt` (ISO-8601 string) and `schemaVersion`. Ownership of `dmbk-sound` SHALL be per collection. The dmbk app SHALL be the owner and only writer of `sound_snapshots`, and this API SHALL only read it. This API SHALL be the owner and only writer of `chime_compositions` (see `chime-compositions`). The database name SHALL be configurable through `SOUND_DB_NAME`, defaulting to `dmbk-sound`.
+The SoundCloud playlists snapshot SHALL be stored in the `sound_snapshots` collection of the `dmbk-sound` database, as the single document `_id: "playlists"`. Its fields are `playlists` (the SoundCloud playlists, stored verbatim), `fetchedAt` (ISO-8601 string) and `schemaVersion`. Ownership of `dmbk-sound` SHALL be per collection. The dmbk app SHALL be the owner and only writer of `sound_snapshots`, and this API SHALL only read it. This API SHALL be the owner and only writer of `chime_compositions` (see `chime-compositions`) and of `vz_voices` (see `vz-voices`). The database name SHALL be configurable through `SOUND_DB_NAME`, defaulting to `dmbk-sound`.
 
 #### Scenario: dmbk refreshes the snapshot
 - **WHEN** a dmbk build reads SoundCloud successfully
@@ -18,8 +18,8 @@ The SoundCloud playlists snapshot SHALL be stored in the `sound_snapshots` colle
 - **THEN** it builds `/sound` from the snapshot in `dmbk-sound.sound_snapshots`
 
 #### Scenario: Collections keep their owners
-- **WHEN** this API saves a chime composition
-- **THEN** it writes only to `dmbk-sound.chime_compositions`, and `sound_snapshots` is untouched
+- **WHEN** this API saves a chime composition or a VZ voice
+- **THEN** it writes only to `dmbk-sound.chime_compositions` or `dmbk-sound.vz_voices`, and `sound_snapshots` is untouched
 
 ### Requirement: dmbk-photos holds no sound data
 Once the move is complete, the `dmbk-photos` database SHALL NOT contain a `sound_snapshots` collection, and neither app SHALL read or write sound data there.

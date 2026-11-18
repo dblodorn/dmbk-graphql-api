@@ -30,6 +30,6 @@
 
 ## 6. Ship
 
-- [ ] 6.1 PR merged (deploys to production)
-- [ ] 6.2 Issue the `vz10m` API key
-- [ ] 6.3 Archive this change once vz10m saves through it
+- [x] 6.1 PR merged (deploys to production) (#38)
+- [x] 6.2 Issue the `vz10m` API key
+- [x] 6.3 Archive this change once vz10m saves through it (2026-11-18: vz10m.dmbk.io shared, renamed and deleted a test voice through it)
