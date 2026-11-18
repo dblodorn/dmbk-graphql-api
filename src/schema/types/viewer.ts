@@ -13,6 +13,10 @@ export const ViewerRef = builder.objectRef<Viewer>('Viewer').implement({
     id: t.exposeString('id', { description: "The account's user id; LoRA records name it as their owner." }),
     email: t.exposeString('email'),
     name: t.exposeString('name', { nullable: true }),
+    image: t.exposeString('image', {
+      nullable: true,
+      description: 'Profile picture URL from Google, as stored at sign-up, or null.',
+    }),
     isAdmin: t.exposeBoolean('isAdmin', { description: 'May curate the photo library.' }),
     loraTrainerTrainings: t.connection({
       type: LoraTrainingRef,

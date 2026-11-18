@@ -150,7 +150,13 @@ async function createAccounts(emails: string[] = TEST_EMAILS): Promise<Record<st
     const found = await ctx.internalAdapter.findUserByEmail(email);
     let userId = found?.user.id;
     if (!userId) {
-      const data = { email, name: `graphql-api test (${email.split('@')[0]})`, emailVerified: true };
+      const data = {
+        email,
+        name: `graphql-api test (${email.split('@')[0]})`,
+        emailVerified: true,
+        // Only the admin gets a picture, so the auth suite sees both shapes of Viewer.image.
+        ...(email === ADMIN_EMAIL ? { image: TEST_AVATAR } : {}),
+      };
       const user = email === DELISTED_EMAIL
         ? await ctx.adapter.create<{ id: string }>({ model: 'user', data: { ...data, createdAt: new Date(), updatedAt: new Date() } })
         : await ctx.internalAdapter.createUser(data, { method: 'admin' });
@@ -612,7 +618,8 @@ async function uploadSuite(adminToken: string, otherToken: string): Promise<void
   }
 }
 
-const VIEWER = '{ viewer { id email isAdmin } }';
+const VIEWER = '{ viewer { id email image isAdmin } }';
+const TEST_AVATAR = 'https://example.invalid/graphql-api-test-avatar.png';
 
 async function authSuite(accounts: Record<string, TestAccount>): Promise<void> {
   console.log('\nAuth');
@@ -624,6 +631,8 @@ async function authSuite(accounts: Record<string, TestAccount>): Promise<void> {
   check('admin session resolves as admin', me?.id === admin.id && me.email === ADMIN_EMAIL && me.isAdmin === true, me);
   const m = (await ok(VIEWER, {}, member.token)).viewer;
   check('member session resolves as non-admin', m?.id === member.id && m.isAdmin === false, m);
+  check('viewer.image is the stored picture', me?.image === TEST_AVATAR, me);
+  check('viewer.image is null without one', m?.image === null, m);
 
   check('anonymous viewer is null', (await ok(VIEWER)).viewer === null);
   check('forged token is anonymous, not an error', (await ok(VIEWER, {}, `${admin.token.split('.')[0]}.forged`)).viewer === null);
