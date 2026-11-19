@@ -11,4 +11,4 @@
 ## 2. Docs and rollout
 
 - [x] 2.1 Update CLAUDE.md where it lists viewer fields, if anywhere.
-- [ ] 2.2 After merging (which deploys): query `{ viewer { image } }` on production with a real session and see a URL. Refresh dmbk-photo's schema copy with `pnpm schema:pull:api`.
+- [x] 2.2 After merging (which deploys): query `{ viewer { image } }` on production with a real session and see a URL. Refresh dmbk-photo's schema copy with `pnpm schema:pull:api`.

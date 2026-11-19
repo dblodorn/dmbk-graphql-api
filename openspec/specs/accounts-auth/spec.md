@@ -43,11 +43,15 @@ Account creation SHALL be refused unless the Google email is verified and listed
 - **THEN** that viewer's next request gets `isAdmin: false` and the public photo scope, without needing to sign in again
 
 ### Requirement: Viewer identity fields
-`Viewer` SHALL expose `id` (the account's user id), `email`, `name` (nullable) and `isAdmin`. It SHALL NOT expose a wallet address.
+`Viewer` SHALL expose `id` (the account's user id), `email`, `name` (nullable), `image` (nullable: the account's profile picture URL as stored at sign-up, or null when there is none) and `isAdmin`. It SHALL NOT expose a wallet address.
 
 #### Scenario: Viewer shape
-- **WHEN** a signed-in client queries `viewer { id email name isAdmin }`
+- **WHEN** a signed-in client queries `viewer { id email name image isAdmin }`
 - **THEN** every field resolves, and `address` is not in the schema
+
+#### Scenario: Account without a picture
+- **WHEN** a signed-in account has no stored picture
+- **THEN** `image` is null and the other fields resolve as usual
 
 ### Requirement: LoRA records are owned by account
 A LoRA training or generated image SHALL be owned by the account whose `id` equals the record's `ownerId`. Every owner-only rule (seeing hidden records, owner-only fields, hide/unhide mutations, `viewer.loraTrainerTrainings` and `viewer.loraTrainerImages`) SHALL use `ownerId`. `walletAddress` SHALL NOT be exposed in the schema.
