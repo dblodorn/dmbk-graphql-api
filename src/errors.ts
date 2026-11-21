@@ -8,7 +8,8 @@ import { ArenaNotFoundError, ArenaRateLimitedError, ArenaUpstreamError } from '.
 import { ChimeCompositionNotFoundError } from './lib/chime/repository.js';
 import { ChimeSaveRateLimitedError } from './lib/chime/limits.js';
 import { VzVoiceNotFoundError } from './lib/vz/repository.js';
-import { VzWriteRateLimitedError } from './lib/vz/limits.js';
+import { Dx7VoiceNotFoundError } from './lib/dx7/repository.js';
+import { VoiceWriteRateLimitedError } from './lib/synth-voices/limits.js';
 
 /**
  * Domain errors a caller can act on, mapped to GraphQL error codes in one
@@ -28,7 +29,8 @@ const CODES: [new (...args: never[]) => Error, string][] = [
   [ChimeCompositionNotFoundError, 'NOT_FOUND'],
   [ChimeSaveRateLimitedError, 'RATE_LIMITED'],
   [VzVoiceNotFoundError, 'NOT_FOUND'],
-  [VzWriteRateLimitedError, 'RATE_LIMITED'],
+  [Dx7VoiceNotFoundError, 'NOT_FOUND'],
+  [VoiceWriteRateLimitedError, 'RATE_LIMITED'],
 ];
 
 export function forbidden(message: string): GraphQLError {
@@ -52,7 +54,7 @@ export function maskError(error: unknown, message: string, isDev?: boolean): Err
         path: graphqlError?.path,
         extensions: {
           code,
-          ...(original instanceof ChimeSaveRateLimitedError || original instanceof VzWriteRateLimitedError
+          ...(original instanceof ChimeSaveRateLimitedError || original instanceof VoiceWriteRateLimitedError
             ? { retryAfterSeconds: original.retryAfterSeconds }
             : {}),
         },

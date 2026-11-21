@@ -14,6 +14,8 @@ import { listVisibleCompositions } from '../lib/chime/repository.js';
 import { ChimeCompositionRef } from './types/chime.js';
 import { listVisibleVoices } from '../lib/vz/repository.js';
 import { VzVoiceRef } from './types/vz.js';
+import { listVisibleVoices as listVisibleDx7Voices } from '../lib/dx7/repository.js';
+import { Dx7VoiceRef } from './types/dx7.js';
 
 builder.queryType({});
 
@@ -106,6 +108,18 @@ builder.queryField('dmbkSoundVzVoices', (t) =>
       search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 12 characters.' }),
     },
     resolve: async (_root, args) => toConnection(await listVisibleVoices(args, { creatorKey: args.creatorKey, search: args.search })),
+  }),
+);
+
+builder.queryField('dmbkSoundDx7Voices', (t) =>
+  t.connection({
+    type: Dx7VoiceRef,
+    description: 'Saved DX7 voices that are not hidden, newest first. `creatorKey` narrows them to that device key\'s voices; `search` to names containing the text.',
+    args: {
+      creatorKey: t.arg.string({ description: 'A device key: only the voices it saved.' }),
+      search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 10 characters.' }),
+    },
+    resolve: async (_root, args) => toConnection(await listVisibleDx7Voices(args, { creatorKey: args.creatorKey, search: args.search })),
   }),
 );
 
