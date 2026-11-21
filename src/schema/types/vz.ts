@@ -17,7 +17,7 @@ import { cursorFor } from '../../lib/cursor.js';
  * later synth's patch type implements it too.
  */
 export const SynthPatchRef = builder.interfaceRef<{ name: string; data: string }>('SynthPatch').implement({
-  description: "A patch in an external synth's library: its display name and its bytes. VzVoice is one.",
+  description: "A patch in an external synth's library: its display name and its bytes. VzVoice and Dx7Voice are ones.",
   interfaces: [builder.nodeInterfaceRef()],
   fields: (t) => ({
     name: t.exposeString('name', { description: "The patch's display name; may be empty." }),
@@ -31,7 +31,8 @@ builder.node(VzVoiceRef, {
   description: 'A VZ-1 / VZ-10M voice saved anonymously. Hidden ones are visible to admins only.',
   interfaces: [SynthPatchRef],
   id: { resolve: (v) => v._id },
-  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value,
+  // every synth's voice documents have the same fields, so the data's length tells a VZ voice from another synth's
+  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && (value as VzVoiceDoc).data.length === DATA_LENGTH,
   loadMany: (ids, context) => Promise.all(ids.map((id) => context.vzVoiceLoader.load(id))),
   fields: (t) => ({
     name: t.exposeString('name', { description: "The voice's name as the VZ shows it, read from the bytes; may be empty." }),

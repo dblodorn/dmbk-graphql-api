@@ -229,6 +229,17 @@ async function deleteVzFixtures(): Promise<number> {
   return result.deletedCount;
 }
 
+// Fixed device keys for the DX7-voice suite.
+const TEST_DX7_KEY_A = 'test-dx7-creator-a-000000000000000000000000';
+const TEST_DX7_KEY_B = 'test-dx7-creator-b-000000000000000000000000';
+
+async function deleteDx7Fixtures(): Promise<number> {
+  const { Dx7VoiceModel } = await import('../src/models/dx7.js');
+  const { creatorHash } = await import('../src/lib/dx7/shape.js');
+  const result = await Dx7VoiceModel.deleteMany({ creatorHash: { $in: [creatorHash(TEST_DX7_KEY_A), creatorHash(TEST_DX7_KEY_B)] } });
+  return result.deletedCount;
+}
+
 async function cleanup(): Promise<void> {
   // Only documents this script creates: marked fixtures, and the .invalid test accounts.
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
@@ -239,9 +250,11 @@ async function cleanup(): Promise<void> {
     const keys = await deleteTestKeys();
     const chimes = await deleteChimeFixtures();
     const voices = await deleteVzFixtures();
+    const dx7Voices = await deleteDx7Fixtures();
     console.log(
       `Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s), ` +
         `${photos} upload fixture photo(s), ${chimes} fixture composition(s), ${voices} fixture VZ voice(s), ` +
+        `${dx7Voices} fixture DX7 voice(s), ` +
         `${accounts} test account(s), ${keys} test API key(s).`,
     );
   });
@@ -1222,6 +1235,89 @@ async function vzSuite(adminToken: string, memberToken: string): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// DX7 voices: the same library plan as VZ voices (lib/synth-voices), so this checks what differs (the format, the
+// name, the SynthPatch type) and that the two libraries stay apart.
+
+const DX7_FIELDS = 'id name data createdAt updatedAt hidden';
+const SAVE_DX7 = `mutation($input: DmbkSoundSaveDx7VoiceInput!, $key: String!) { dmbkSoundSaveDx7Voice(input: $input) {
+  created dx7Voice { ${DX7_FIELDS} yours(creatorKey: $key) } dx7VoiceEdge { cursor node { id } } } }`;
+const UPDATE_DX7 = `mutation($input: DmbkSoundUpdateDx7VoiceInput!) { dmbkSoundUpdateDx7Voice(input: $input) { dx7Voice { ${DX7_FIELDS} } } }`;
+const DELETE_DX7 = `mutation($input: DmbkSoundDeleteDx7VoiceInput!) { dmbkSoundDeleteDx7Voice(input: $input) { deletedDx7VoiceId } }`;
+const HIDE_DX7 = `mutation($input: DmbkSoundSetDx7VoiceHiddenInput!) { dmbkSoundSetDx7VoiceHidden(input: $input) { dx7Voice { id hidden } } }`;
+const LIST_DX7 = `query($first: Int, $after: String, $creatorKey: String, $search: String, $key: String!) {
+  dmbkSoundDx7Voices(first: $first, after: $after, creatorKey: $creatorKey, search: $search) {
+    edges { cursor node { id name yours(creatorKey: $key) } } pageInfo { hasNextPage endCursor } } }`;
+
+/** 155 voice bytes as base64, with `name` at offset 145 and a random body so each call differs. */
+function dx7Voice(name: string, seed = crypto.randomBytes(8)): string {
+  const bytes = Buffer.alloc(155);
+  seed.copy(bytes, 0);
+  Buffer.from(name.padEnd(10, ' ').slice(0, 10), 'ascii').copy(bytes, 145);
+  return bytes.toString('base64');
+}
+
+async function dx7Suite(adminToken: string, memberToken: string): Promise<void> {
+  console.log('\nDX7 voices');
+  const A = TEST_DX7_KEY_A, B = TEST_DX7_KEY_B;
+  const save = (data: string, creatorKey = A) => gql(SAVE_DX7, { input: { data, creatorKey }, key: creatorKey }, undefined, { endUserIp: visitor() });
+  const write = (query: string, input: Record<string, unknown>) => gql(query, { input }, undefined, { endUserIp: visitor() });
+  const list = async (vars: Record<string, unknown> = {}) =>
+    (await ok(LIST_DX7, { first: 50, key: A, ...vars })).dmbkSoundDx7Voices.edges.map((e: any) => e.node) as { id: string; name: string; yours: boolean }[];
+  const refused = async (name: string, res: Promise<{ data?: any; errors?: GqlError[] }>, codes = ['BAD_USER_INPUT']) => {
+    const { errors } = await res;
+    check(`${name} → ${codes.join('/')}`, codes.includes(codesOf(errors)[0] ?? ''), errors);
+  };
+
+  try {
+    const data = dx7Voice('TEST EPNO');
+    check('the fixture is 208 base64 characters with one =', data.length === 208 && data.endsWith('=') && !data.endsWith('=='));
+    const first = (await save(data)).data?.dmbkSoundSaveDx7Voice;
+    const v = first?.dx7Voice;
+    check('save: created, the name read from bytes 145–154', first?.created === true && v?.name === 'TEST EPNO', first);
+    check('save: the bytes come back as given, yours, with an edge', v?.data === data && v?.yours === true && first?.dx7VoiceEdge?.node?.id === v?.id);
+    const asPatch = (await ok(SYNTH_PATCH_NODE, { id: v?.id })).node;
+    check('node(id) through SynthPatch: a Dx7Voice with name and data', asPatch?.__typename === 'Dx7Voice' && asPatch.name === 'TEST EPNO' && asPatch.data === data, asPatch);
+
+    // the two libraries stay apart: a VZ voice still resolves as a VzVoice, and neither listing holds the other's
+    const vz = (await gql(SAVE_VZ, { input: { data: vzVoice('TEST APART'), creatorKey: TEST_VZ_KEY_A }, key: TEST_VZ_KEY_A }, undefined, { endUserIp: visitor() })).data?.dmbkSoundSaveVzVoice?.vzVoice;
+    check('a VZ voice still resolves as VzVoice', (await ok(SYNTH_PATCH_NODE, { id: vz?.id })).node?.__typename === 'VzVoice', vz);
+    check('the DX7 listing has no VZ voices', !(await list()).some((x) => x.id === vz?.id));
+    await deleteVzFixtures();
+
+    const again = (await save(data)).data?.dmbkSoundSaveDx7Voice;
+    check('same key, same bytes: the stored one, created false', again?.created === false && again.dx7Voice.id === v?.id, again);
+    await refused('obscene name', save(dx7Voice('5H1T PAD')));
+    await refused('data not 155 bytes (a VZ voice)', save(vzVoice('TEST WRONG')));
+    await refused('data not base64', save('!'.repeat(208)));
+    await refused('malformed device key', save(dx7Voice('TEST KEY'), 'short'));
+    const keyless = await gql(SAVE_DX7, { input: { data: dx7Voice('TEST KEYLESS'), creatorKey: A }, key: A }, undefined, { key: null, ip: freshIp() });
+    check('keyless save → FORBIDDEN', codesOf(keyless.errors)[0] === 'FORBIDDEN', keyless);
+
+    const other = (await save(dx7Voice('TEST OTHER'), B)).data?.dmbkSoundSaveDx7Voice?.dx7Voice;
+    const mine = await list({ creatorKey: A });
+    check("creatorKey: only that key's voices", mine.some((x) => x.id === v?.id) && !mine.some((x) => x.id === other?.id), mine);
+    check('search: names containing the text, any case', (await list({ search: 'test ep' })).some((x) => x.id === v?.id));
+    await expectRefused('search over 10 characters', LIST_DX7, { search: 'A'.repeat(11), key: A }, undefined, ['BAD_USER_INPUT']);
+
+    const renamed = dx7Voice('TEST BRASS');
+    const upd = (await write(UPDATE_DX7, { id: v?.id, data: renamed, creatorKey: A })).data?.dmbkSoundUpdateDx7Voice?.dx7Voice;
+    check('update by its key: new bytes and name, same createdAt', upd?.name === 'TEST BRASS' && upd.data === renamed && upd.createdAt === v?.createdAt, upd);
+    await refused('update by another key', write(UPDATE_DX7, { id: v?.id, data: dx7Voice('TEST X'), creatorKey: B }), ['FORBIDDEN']);
+
+    await expectRefused('member hides', HIDE_DX7, { input: { id: v?.id, hidden: true } }, memberToken, ['FORBIDDEN']);
+    check('admin hides; gone from the listing', (await ok(HIDE_DX7, { input: { id: v?.id, hidden: true } }, adminToken)).dmbkSoundSetDx7VoiceHidden.dx7Voice.hidden === true &&
+      !(await list()).some((x) => x.id === v?.id));
+    await ok(HIDE_DX7, { input: { id: v?.id, hidden: false } }, adminToken);
+
+    await refused('delete by another key', write(DELETE_DX7, { id: v?.id, creatorKey: B }), ['FORBIDDEN']);
+    const del = (await write(DELETE_DX7, { id: v?.id, creatorKey: A })).data?.dmbkSoundDeleteDx7Voice;
+    check('delete by its key: gone', del?.deletedDx7VoiceId === v?.id && (await ok(SYNTH_PATCH_NODE, { id: v?.id })).node === null, del);
+  } finally {
+    await deleteDx7Fixtures().catch((e) => console.error('  ! DX7 voice cleanup failed (run --cleanup):', e));
+  }
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes('--setup')) return setup();
 
@@ -1284,6 +1380,7 @@ async function main(): Promise<void> {
     await uploadSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await chimeSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await vzSuite(admin.token, accounts[MEMBER_EMAIL].token);
+    await dx7Suite(admin.token, accounts[MEMBER_EMAIL].token);
     const stub = await startArenaStub();
     try {
       await arenaSuite(accounts[MEMBER_EMAIL].token);

@@ -85,6 +85,13 @@ export const env = {
     dailyLimit: positiveInt('VZ_WRITE_DAILY_LIMIT', 2000),
   },
 
+  /** Anonymous DX7-voice writes: saves, updates, deletes (`lib/dx7/limits.ts`), on the VZ plan. */
+  dx7Writes: {
+    rateLimit: positiveInt('DX7_WRITE_RATE_LIMIT', 60),
+    rateWindowSeconds: positiveInt('DX7_WRITE_RATE_WINDOW_SECONDS', 3600),
+    dailyLimit: positiveInt('DX7_WRITE_DAILY_LIMIT', 2000),
+  },
+
   mongoUri: required('MONGODB_URI'),
   /** Owned by the dmbk app. This API reads it and performs curation writes. */
   photosDbName: process.env.PHOTOS_DB_NAME || 'dmbk-photos',

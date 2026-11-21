@@ -23,6 +23,9 @@ import { ChimeCompositionEdgeRef, ChimeCompositionRef, ChimeUnitInputRef } from 
 import { deleteVoice, saveVoice, setVoiceHidden, updateVoice } from '../lib/vz/repository.js';
 import { takeWrite } from '../lib/vz/limits.js';
 import { VzVoiceEdgeRef, VzVoiceRef } from './types/vz.js';
+import * as Dx7 from '../lib/dx7/repository.js';
+import { takeWrite as takeDx7Write } from '../lib/dx7/limits.js';
+import { Dx7VoiceEdgeRef, Dx7VoiceRef } from './types/dx7.js';
 
 /*
  * Every mutation here is a Relay input-object mutation: one `input` argument,
@@ -571,6 +574,109 @@ builder.relayMutationField(
   {
     outputFields: (t) => ({
       vzVoice: t.field({ type: VzVoiceRef, resolve: (payload) => payload.voice }),
+    }),
+  },
+);
+
+// ---------------------------------------------------------------------------
+// dmbk-sound: Yamaha DX7 voices (dx7), on the VZ voices' plan
+
+const DX7_DATA = 'The 155 unpacked voice bytes (VCED) as base64 (208 characters). The name is read from them.';
+
+/** Writes come only from a client app's server, which also forwards the visitor for the rate limit. */
+function dx7Write(context: { client: string | null; endUserIp: string | null }): void {
+  if (context.client === null) throw forbidden('Changing DX7 voices requires a client API key.');
+  takeDx7Write(context.client, context.endUserIp);
+}
+
+builder.relayMutationField(
+  'dmbkSoundSaveDx7Voice',
+  {
+    inputFields: (t) => ({
+      data: t.string({ required: true, description: DX7_DATA }),
+      creatorKey: t.string({ required: true, description: VZ_KEY }),
+    }),
+  },
+  {
+    description:
+      'Save a voice anonymously under a device key. The same key saving identical bytes again returns the stored voice with `created: false`. Obscene names are refused (BAD_USER_INPUT). Rate-limited per visitor (`X-End-User-IP`) and per client.',
+    resolve: async (_root, { input }, context) => {
+      dx7Write(context);
+      return Dx7.saveVoice(input.data, input.creatorKey);
+    },
+  },
+  {
+    outputFields: (t) => ({
+      dx7Voice: t.field({ type: Dx7VoiceRef, resolve: (payload) => payload.voice }),
+      dx7VoiceEdge: t.field({ type: Dx7VoiceEdgeRef, resolve: (payload) => payload.voice }),
+      created: t.boolean({ resolve: (payload) => payload.created }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundUpdateDx7Voice',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Dx7VoiceRef }),
+      data: t.string({ required: true, description: DX7_DATA }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the voice.' }),
+    }),
+  },
+  {
+    description: "Replace a voice's bytes (renaming it too, since the name is in them). Only the device key that saved it may; others get FORBIDDEN.",
+    resolve: async (_root, { input }, context) => {
+      dx7Write(context);
+      return { voice: await Dx7.updateVoice(input.id.id, input.data, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      dx7Voice: t.field({ type: Dx7VoiceRef, resolve: (payload) => payload.voice }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundDeleteDx7Voice',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Dx7VoiceRef }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the voice.' }),
+    }),
+  },
+  {
+    description: 'Delete a voice for good. Only the device key that saved it may; others get FORBIDDEN.',
+    resolve: async (_root, { input }, context) => {
+      dx7Write(context);
+      return { id: await Dx7.deleteVoice(input.id.id, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      deletedDx7VoiceId: t.globalID({
+        description: 'The deleted voice, for `@deleteRecord`.',
+        resolve: (payload) => ({ type: 'Dx7Voice', id: payload.id }),
+      }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundSetDx7VoiceHidden',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Dx7VoiceRef }),
+      hidden: t.boolean({ required: true }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => ({ voice: await Dx7.setVoiceHidden(input.id.id, input.hidden) }),
+  },
+  {
+    outputFields: (t) => ({
+      dx7Voice: t.field({ type: Dx7VoiceRef, resolve: (payload) => payload.voice }),
     }),
   },
 );
