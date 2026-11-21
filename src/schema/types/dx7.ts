@@ -1,5 +1,6 @@
 import { builder } from '../builder.js';
-import type { Dx7VoiceDoc } from '../../models/dx7.js';
+import type { Dx7BankDoc, Dx7VoiceDoc } from '../../models/dx7.js';
+import { isBankCreator } from '../../lib/dx7/banks.js';
 import { DATA_LENGTH, VOICE_BYTES } from '../../lib/dx7/shape.js';
 import { isCreator } from '../../lib/dx7/repository.js';
 import { cursorFor } from '../../lib/cursor.js';
@@ -46,5 +47,46 @@ export const Dx7VoiceEdgeRef = builder.objectRef<Dx7VoiceDoc>('DmbkSoundDx7Voice
   fields: (t) => ({
     cursor: t.string({ resolve: (v) => cursorFor(v) }),
     node: t.field({ type: Dx7VoiceRef, resolve: (v) => v }),
+  }),
+});
+
+/** A DX7 bank: 32 slots like a cartridge (openspec/specs/dx7-voices, "Banks"). */
+export const Dx7BankRef = builder.objectRef<Dx7BankDoc>('Dx7Bank');
+
+builder.node(Dx7BankRef, {
+  description: 'A bank of 32 DX7 voice slots, like a cartridge, saved anonymously. Hidden ones are visible to admins only.',
+  id: { resolve: (b) => b._id },
+  isTypeOf: (value) => typeof value === 'object' && value !== null && 'slots' in value,
+  loadMany: (ids, context) => Promise.all(ids.map((id) => context.dx7BankLoader.load(id))),
+  fields: (t) => ({
+    name: t.exposeString('name'),
+    slots: t.field({
+      type: [Dx7VoiceRef],
+      nullable: { list: false, items: true },
+      description: 'Exactly 32, in cartridge order. A slot is null when empty, or when its voice has been deleted or hidden.',
+      resolve: (b, _args, context) => Promise.all(b.slots.map((id) => (id ? context.dx7VoiceLoader.load(id) : null))),
+    }),
+    createdAt: t.exposeString('createdAt', { description: 'ISO-8601. The listing is ordered by this.' }),
+    updatedAt: t.exposeString('updatedAt'),
+    yours: t.boolean({
+      description: 'Whether this device key saved the bank.',
+      args: { creatorKey: t.arg.string({ required: true }) },
+      resolve: (b, args) => isBankCreator(b, args.creatorKey),
+    }),
+    hidden: t.boolean({
+      nullable: true,
+      description: 'Admin only.',
+      authScopes: { admin: true },
+      unauthorizedResolver: () => null,
+      resolve: (b) => b.hidden,
+    }),
+  }),
+});
+
+export const Dx7BankEdgeRef = builder.objectRef<Dx7BankDoc>('DmbkSoundDx7BankEdge').implement({
+  description: 'A bank with its cursor in the `dmbkSoundDx7Banks` ordering.',
+  fields: (t) => ({
+    cursor: t.string({ resolve: (b) => cursorFor(b) }),
+    node: t.field({ type: Dx7BankRef, resolve: (b) => b }),
   }),
 });
