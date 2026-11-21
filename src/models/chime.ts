@@ -43,6 +43,7 @@ const unitSchema = new Schema<ChimeUnit>(
     y: Number,
     rank: Number,
     instrument: String,
+    patch: String, // no default: only external-synth units hold it
   },
   { _id: false, strict: true },
 );

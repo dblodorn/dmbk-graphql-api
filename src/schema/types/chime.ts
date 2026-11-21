@@ -41,7 +41,10 @@ const DESCRIPTIONS = {
   y: range('y', 'Vertical offset from the page center, in CSS px'),
   rank: range('rank', 'Stacking order among the units, 0 at the back'),
   scale: "A scale name from windchime's catalog.",
-  voice: "A voice id from windchime's catalog (`v<i>` built-in, `s0:<p>` GM preset); null for the default.",
+  voice:
+    "A voice id from windchime's catalog (`v<i>` built-in, `s0:<p>` GM preset, `x:<synth>` external synth); null for the default.",
+  patch:
+    "External-synth units only: the patch's id in that synth's library (24 lowercase hex, the `_id` of e.g. a VzVoice), null for the synth's INIT patch.",
 } as const;
 
 export const ChimeUnitRef = builder.objectRef<ChimeUnit>('ChimeUnit').implement({
@@ -67,11 +70,16 @@ export const ChimeUnitRef = builder.objectRef<ChimeUnit>('ChimeUnit').implement(
       description: 'CHIME for units saved before instruments existed.',
       resolve: (u) => u.instrument ?? DEFAULT_INSTRUMENT,
     }),
+    patch: t.string({
+      nullable: true,
+      description: `${DESCRIPTIONS.patch} Null on every other unit.`,
+      resolve: (u) => u.patch ?? null,
+    }),
   }),
 });
 
 export const ChimeUnitInputRef = builder.inputType('ChimeUnitInput', {
-  description: 'One chime to save. Every field is required except `voice` and `instrument`.',
+  description: 'One chime to save. Every field is required except `voice`, `instrument` and `patch`.',
   fields: (t) => ({
     volume: t.int({ required: true, description: DESCRIPTIONS.volume }),
     tubes: t.int({ required: true, description: DESCRIPTIONS.tubes }),
@@ -89,6 +97,7 @@ export const ChimeUnitInputRef = builder.inputType('ChimeUnitInput', {
     y: t.int({ required: true, description: DESCRIPTIONS.y }),
     rank: t.int({ required: true, description: DESCRIPTIONS.rank }),
     instrument: t.field({ type: ChimeInstrumentEnum, description: 'Omitted means CHIME.' }),
+    patch: t.string({ description: `${DESCRIPTIONS.patch} Omitted means null. Refused on any other unit.` }),
   }),
 });
 
