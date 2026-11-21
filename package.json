@@ -16,6 +16,7 @@
     "vz:collection": "tsx --env-file=.env scripts/vz-voices-collection.ts",
     "vz:import": "tsx --env-file=.env scripts/vz-import-syx.ts",
     "dx7:collection": "tsx --env-file=.env scripts/dx7-voices-collection.ts",
+    "dx7:import": "tsx --env-file=.env scripts/dx7-import-syx.ts",
     "api-client": "tsx --env-file=.env scripts/api-clients.ts"
   },
   "keywords": [],
