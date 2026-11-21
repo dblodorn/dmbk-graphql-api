@@ -59,7 +59,18 @@ export interface ChimeUnit {
   rank: number;
   /** Missing on units saved before it existed. */
   instrument?: Instrument;
+  /**
+   * Only on external-synth units (`voice` = `x:<synth>`): the patch's id in that synth's library, or null for
+   * the synth's INIT patch. Absent on every other unit.
+   */
+  patch?: string | null;
 }
+
+/** A patch reference: the 24 lowercase hex characters of the patch document's `_id` in its synth's library. */
+export const PATCH_PATTERN = /^[0-9a-f]{24}$/;
+
+/** External synths are voices `x:<synth>`, `<synth>` being the engine package name without `@dblodorn/` and `-engine`. */
+export const isExternalVoice = (voice: string | null | undefined): boolean => !!voice && voice.startsWith('x:');
 
 const int = ([min, max]: readonly [number, number]) => z.int().min(min).max(max);
 
@@ -85,12 +96,21 @@ export const UnitInputSchema = z
     y: int(INT_FIELDS.y),
     rank: int(INT_FIELDS.rank),
     instrument: z.enum(INSTRUMENTS).nullish().transform((v) => v ?? DEFAULT_INSTRUMENT), // GraphQL may send null for omitted
+    patch: z.string().regex(PATCH_PATTERN, { message: 'A patch is 24 lowercase hex characters.' }).nullish(),
   })
-  .strict();
+  .strict()
+  .superRefine((u, ctx) => {
+    if (u.patch != null && !isExternalVoice(u.voice)) {
+      ctx.addIssue({ code: 'custom', path: ['patch'], message: 'Only an external-synth voice (x:…) has a patch.' });
+    }
+  })
+  // An external-synth unit always holds `patch` (omitted → its INIT, null); any other unit holds none, so its
+  // stored document and fingerprint are exactly what they were before `patch` existed.
+  .transform(({ patch, ...u }): ChimeUnit => (isExternalVoice(u.voice) ? { ...u, patch: patch ?? null } : u));
 
 export const UnitsInputSchema = z.array(UnitInputSchema).min(1).max(MAX_UNITS);
 
-/** The collection validator: document and unit, every field but `instrument` required, nothing else allowed. */
+/** The collection validator: document and unit, every field but `instrument` and `patch` required, nothing else allowed. */
 export function compositionJsonSchema(): Record<string, unknown> {
   const intProps = Object.fromEntries(
     Object.entries(INT_FIELDS).map(([name, [minimum, maximum]]) => [name, { bsonType: 'int', minimum, maximum }]),
@@ -105,8 +125,9 @@ export function compositionJsonSchema(): Record<string, unknown> {
       voice: { bsonType: ['string', 'null'], enum: [null, ...VOICE_IDS] },
       midiMode: { bsonType: 'string', enum: [...MIDI_MODES] },
       notes: { bsonType: 'bool' },
-      // allowed, not required: units stored before it existed stay valid
+      // allowed, not required: units stored before they existed stay valid
       instrument: { bsonType: 'string', enum: [...INSTRUMENTS] },
+      patch: { bsonType: ['string', 'null'], pattern: PATCH_PATTERN.source },
     },
   };
   return {

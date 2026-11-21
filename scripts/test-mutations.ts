@@ -1002,7 +1002,7 @@ async function arenaSuite(token: string): Promise<void> {
 // ---------------------------------------------------------------------------
 // Chime compositions
 
-const CHIME_UNIT_FIELDS = 'volume tubes wind decay cutoff resonance root scale voice channel midiMode notes x y rank';
+const CHIME_UNIT_FIELDS = 'volume tubes wind decay cutoff resonance root scale voice channel midiMode notes x y rank patch';
 const SAVE_CHIME = `mutation($input: DmbkSoundSaveChimeCompositionInput!) { dmbkSoundSaveChimeComposition(input: $input) {
   created chimeComposition { id title unitCount createdAt hidden units { ${CHIME_UNIT_FIELDS} } } chimeCompositionEdge { cursor node { id } } } }`;
 const HIDE_CHIME = `mutation($input: DmbkSoundSetChimeCompositionHiddenInput!) { dmbkSoundSetChimeCompositionHidden(input: $input) { chimeComposition { id hidden } } }`;
@@ -1052,6 +1052,17 @@ async function chimeSuite(adminToken: string, memberToken: string): Promise<void
     const moved = (await save(units.map((u, i) => (i === 1 ? { ...u, x: (u.x as number) + 1 } : u)))).data?.dmbkSoundSaveChimeComposition;
     check('a moved unit is a new composition', moved?.created === true && moved.chimeComposition.id !== c?.id, moved);
 
+    // External synths: voice x:<synth>, patch = a library id (24 hex) or null for the synth's INIT
+    const patchA = crypto.randomBytes(12).toString('hex'), patchB = crypto.randomBytes(12).toString('hex');
+    const vzUnits = chimeFixture(2).map((u, i) => ({ ...u, voice: 'x:casio-vz', ...(i === 0 ? { patch: patchA } : {}) }));
+    const vz = (await save(vzUnits)).data?.dmbkSoundSaveChimeComposition;
+    check('external synth: patch kept, omitted patch comes back null', vz?.created === true &&
+      vz.chimeComposition.units[0].patch === patchA && vz.chimeComposition.units[1].patch === null, vz);
+    check('external synth: the title names CASIO VZ-10M', /CASIO/.test(vz?.chimeComposition.title ?? ''), vz?.chimeComposition.title);
+    const vzOther = (await save(vzUnits.map((u, i) => (i === 0 ? { ...u, patch: patchB } : u)))).data?.dmbkSoundSaveChimeComposition;
+    check('a changed patch is a new composition', vzOther?.created === true && vzOther.chimeComposition.id !== vz?.chimeComposition.id, vzOther);
+    check('soundfont units come back with patch null', c?.units.every((u: any) => u.patch === null), c?.units);
+
     const refusedSave = async (name: string, bad: unknown[], codes = ['BAD_USER_INPUT']) => {
       const { data, errors } = await save(bad);
       const code = errors?.[0]?.extensions?.code;
@@ -1060,6 +1071,9 @@ async function chimeSuite(adminToken: string, memberToken: string): Promise<void
     await refusedSave('decay out of range', chimeFixture(1, { decay: 500 }));
     await refusedSave('unknown scale', chimeFixture(1, { scale: 'NOT-A-SCALE' }));
     await refusedSave('unknown voice', chimeFixture(1, { voice: 's0:9999' }));
+    await refusedSave('unknown external synth', chimeFixture(1, { voice: 'x:not-a-synth' }));
+    await refusedSave('patch on a soundfont unit', chimeFixture(1, { voice: 'v2', patch: patchA }));
+    await refusedSave('malformed patch', chimeFixture(1, { voice: 'x:casio-vz', patch: 'ABC' }));
     await refusedSave('extra field', chimeFixture(1, { foo: 1 }), ['BAD_USER_INPUT', 'GRAPHQL_VALIDATION_FAILED']);
     await refusedSave('float volume', chimeFixture(1, { volume: 0.5 }), ['BAD_USER_INPUT', 'GRAPHQL_VALIDATION_FAILED']);
     await refusedSave('no units', []);
@@ -1114,6 +1128,7 @@ const LIST_VZ = `query($first: Int, $after: String, $creatorKey: String, $search
   dmbkSoundVzVoices(first: $first, after: $after, creatorKey: $creatorKey, search: $search) {
     edges { cursor node { id name yours(creatorKey: $key) } } pageInfo { hasNextPage endCursor } } }`;
 const VZ_NODE = `query($id: ID!) { node(id: $id) { ... on VzVoice { id name hidden } } }`;
+const SYNTH_PATCH_NODE = `query($id: ID!) { node(id: $id) { __typename ... on SynthPatch { id name data } } }`;
 
 /** 336 voice bytes as base64, with `name` at offset 322 and a random body so each call differs. */
 function vzVoice(name: string, seed = crypto.randomBytes(8)): string {
@@ -1140,6 +1155,8 @@ async function vzSuite(adminToken: string, memberToken: string): Promise<void> {
     check('save: the bytes come back as given', v?.data === data);
     check('save: yours for its key, an edge with a cursor', v?.yours === true && first?.vzVoiceEdge?.node?.id === v?.id && !!first?.vzVoiceEdge?.cursor);
     check('save: createdAt = updatedAt, hidden null for a non-admin', v?.createdAt === v?.updatedAt && v?.hidden === null, v);
+    const asPatch = (await ok(SYNTH_PATCH_NODE, { id: v?.id })).node;
+    check('node(id) through SynthPatch: name and data', asPatch?.__typename === 'VzVoice' && asPatch.name === 'TEST ORGAN' && asPatch.data === data, asPatch);
 
     const again = (await save(data)).data?.dmbkSoundSaveVzVoice;
     check('same key, same bytes: the stored one, created false', again?.created === false && again.vzVoice.id === v?.id, again);
@@ -1182,6 +1199,7 @@ async function vzSuite(adminToken: string, memberToken: string): Promise<void> {
     const hid = (await ok(HIDE_VZ, { input: { id: v?.id, hidden: true } }, adminToken)).dmbkSoundSetVzVoiceHidden;
     check('admin hides', hid.vzVoice.hidden === true, hid);
     check('hidden: gone from the listing and from node()', !(await list()).some((x) => x.id === v?.id) && (await ok(VZ_NODE, { id: v?.id })).node === null);
+    check('hidden: null through SynthPatch too', (await ok(SYNTH_PATCH_NODE, { id: v?.id })).node === null);
     await refused('hidden: its owner can no longer update it', write(UPDATE_VZ, { id: v?.id, data: vzVoice('TEST Y'), creatorKey: A }), ['NOT_FOUND']);
     await ok(HIDE_VZ, { input: { id: v?.id, hidden: false } }, adminToken);
     check('unhidden: back in the listing', (await list()).some((x) => x.id === v?.id));
