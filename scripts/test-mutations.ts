@@ -236,7 +236,10 @@ const TEST_DX7_KEY_B = 'test-dx7-creator-b-000000000000000000000000';
 async function deleteDx7Fixtures(): Promise<number> {
   const { Dx7VoiceModel } = await import('../src/models/dx7.js');
   const { creatorHash } = await import('../src/lib/dx7/shape.js');
-  const result = await Dx7VoiceModel.deleteMany({ creatorHash: { $in: [creatorHash(TEST_DX7_KEY_A), creatorHash(TEST_DX7_KEY_B)] } });
+  const { Dx7BankModel } = await import('../src/models/dx7.js');
+  const owners = { $in: [creatorHash(TEST_DX7_KEY_A), creatorHash(TEST_DX7_KEY_B)] };
+  await Dx7BankModel.deleteMany({ creatorHash: owners });
+  const result = await Dx7VoiceModel.deleteMany({ creatorHash: owners });
   return result.deletedCount;
 }
 
@@ -1310,8 +1313,34 @@ async function dx7Suite(adminToken: string, memberToken: string): Promise<void> 
       !(await list()).some((x) => x.id === v?.id));
     await ok(HIDE_DX7, { input: { id: v?.id, hidden: false } }, adminToken);
 
+    // banks: 32 slots of voice ids, like a cartridge
+    const SAVE_BANK = `mutation($input: DmbkSoundSaveDx7BankInput!, $key: String!) { dmbkSoundSaveDx7Bank(input: $input) {
+      created dx7Bank { id name yours(creatorKey: $key) slots { id name } } dx7BankEdge { cursor } } }`;
+    const UPDATE_BANK = `mutation($input: DmbkSoundUpdateDx7BankInput!) { dmbkSoundUpdateDx7Bank(input: $input) { dx7Bank { id name } } }`;
+    const DELETE_BANK = `mutation($input: DmbkSoundDeleteDx7BankInput!) { dmbkSoundDeleteDx7Bank(input: $input) { deletedDx7BankId } }`;
+    const BANK_NODE = `query($id: ID!) { node(id: $id) { __typename ... on Dx7Bank { name slots { id } } } }`;
+    const LIST_BANKS = `query($key: String!, $search: String) { dmbkSoundDx7Banks(first: 50, search: $search) { edges { node { id name yours(creatorKey: $key) } } } }`;
+    const slots = [v?.id, other?.id, ...Array(30).fill(null)];
+    const saveBank = (input: Record<string, unknown>, key = A) => gql(SAVE_BANK, { input: { creatorKey: key, ...input }, key }, undefined, { endUserIp: visitor() });
+    const bank = (await saveBank({ name: 'TEST CARD', slots })).data?.dmbkSoundSaveDx7Bank;
+    check('bank: saved with 32 slots, the voices resolved, yours', bank?.created === true && bank.dx7Bank.slots.length === 32 &&
+      bank.dx7Bank.slots[0]?.name === 'TEST BRASS' && bank.dx7Bank.slots[1]?.id === other?.id && bank.dx7Bank.slots[2] === null && bank.dx7Bank.yours === true, bank);
+    check('bank: node(id) is a Dx7Bank', (await ok(BANK_NODE, { id: bank?.dx7Bank.id })).node?.__typename === 'Dx7Bank');
+    check('bank: identical again → created false', (await saveBank({ name: 'TEST CARD', slots })).data?.dmbkSoundSaveDx7Bank?.created === false);
+    check('bank: listed and searchable', (await ok(LIST_BANKS, { key: A, search: 'test card' })).dmbkSoundDx7Banks.edges.some((e: any) => e.node.id === bank?.dx7Bank.id));
+    await refused('bank of 31 slots', saveBank({ name: 'TEST SHORT', slots: slots.slice(1) }));
+    await refused('bank with a VZ voice id', saveBank({ name: 'TEST VZID', slots: [Buffer.from(`VzVoice:${'a'.repeat(24)}`).toString('base64'), ...slots.slice(1)] }));
+    await refused('bank with an unknown voice', saveBank({ name: 'TEST GONE', slots: [Buffer.from(`Dx7Voice:${'f'.repeat(24)}`).toString('base64'), ...slots.slice(1)] }));
+    await refused('bank with an obscene name', saveBank({ name: 'SHIT CARD', slots }));
+    await refused('bank renamed by another key', write(UPDATE_BANK, { id: bank?.dx7Bank.id, name: 'TEST X', slots, creatorKey: B }), ['FORBIDDEN']);
+    check('bank: renamed by its key', (await write(UPDATE_BANK, { id: bank?.dx7Bank.id, name: 'TEST CARD 2', slots, creatorKey: A })).data?.dmbkSoundUpdateDx7Bank?.dx7Bank.name === 'TEST CARD 2');
+
     await refused('delete by another key', write(DELETE_DX7, { id: v?.id, creatorKey: B }), ['FORBIDDEN']);
     const del = (await write(DELETE_DX7, { id: v?.id, creatorKey: A })).data?.dmbkSoundDeleteDx7Voice;
+    check("bank: a deleted voice's slot reads empty", (await ok(BANK_NODE, { id: bank?.dx7Bank.id })).node?.slots[0] === null);
+    await refused('bank deleted by another key', write(DELETE_BANK, { id: bank?.dx7Bank.id, creatorKey: B }), ['FORBIDDEN']);
+    check('bank: deleted by its key', (await write(DELETE_BANK, { id: bank?.dx7Bank.id, creatorKey: A })).data?.dmbkSoundDeleteDx7Bank?.deletedDx7BankId === bank?.dx7Bank.id &&
+      (await ok(BANK_NODE, { id: bank?.dx7Bank.id })).node === null);
     check('delete by its key: gone', del?.deletedDx7VoiceId === v?.id && (await ok(SYNTH_PATCH_NODE, { id: v?.id })).node === null, del);
   } finally {
     await deleteDx7Fixtures().catch((e) => console.error('  ! DX7 voice cleanup failed (run --cleanup):', e));

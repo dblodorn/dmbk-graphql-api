@@ -25,7 +25,10 @@ import { takeWrite } from '../lib/vz/limits.js';
 import { VzVoiceEdgeRef, VzVoiceRef } from './types/vz.js';
 import * as Dx7 from '../lib/dx7/repository.js';
 import { takeWrite as takeDx7Write } from '../lib/dx7/limits.js';
-import { Dx7VoiceEdgeRef, Dx7VoiceRef } from './types/dx7.js';
+import { Dx7BankEdgeRef, Dx7BankRef, Dx7VoiceEdgeRef, Dx7VoiceRef } from './types/dx7.js';
+import * as Dx7Banks from '../lib/dx7/banks.js';
+import { InvalidInputError } from '../lib/cursor.js';
+import { decodeGlobalID } from '@pothos/plugin-relay';
 
 /*
  * Every mutation here is a Relay input-object mutation: one `input` argument,
@@ -677,6 +680,114 @@ builder.relayMutationField(
   {
     outputFields: (t) => ({
       dx7Voice: t.field({ type: Dx7VoiceRef, resolve: (payload) => payload.voice }),
+    }),
+  },
+);
+
+// DX7 banks: 32 slots of DX7 voices, like a cartridge. Slots arrive as voice global IDs (or null for empty).
+
+const BANK_SLOTS_ARG = 'Exactly 32, in cartridge order: a Dx7Voice global ID, or null for an empty slot.';
+
+/** Global IDs → 24-hex voice ids; anything that isn't a Dx7Voice id is refused. */
+function slotIds(slots: readonly (string | null | undefined)[]): (string | null)[] {
+  return slots.map((s) => {
+    if (s === null || s === undefined || s === '') return null;
+    let decoded: { typename: string; id: string };
+    try { decoded = decodeGlobalID(s); } catch { throw new InvalidInputError('slots: each slot is a Dx7Voice ID or null.'); }
+    if (decoded.typename !== 'Dx7Voice') throw new InvalidInputError('slots: each slot is a Dx7Voice ID or null.');
+    return decoded.id;
+  });
+}
+
+builder.relayMutationField(
+  'dmbkSoundSaveDx7Bank',
+  {
+    inputFields: (t) => ({
+      name: t.string({ required: true, description: 'The bank\'s name, 1 to 20 printable ASCII characters.' }),
+      slots: t.stringList({ required: { list: true, items: false }, description: BANK_SLOTS_ARG }),
+      creatorKey: t.string({ required: true, description: VZ_KEY }),
+    }),
+  },
+  {
+    description: 'Save a bank anonymously under a device key. The same key saving an identical bank again returns it with `created: false`. Every voice must be a saved, visible DX7 voice (anyone\'s). Shares the DX7 write budget.',
+    resolve: async (_root, { input }, context) => {
+      dx7Write(context);
+      return Dx7Banks.saveBank(input.name, slotIds(input.slots), input.creatorKey);
+    },
+  },
+  {
+    outputFields: (t) => ({
+      dx7Bank: t.field({ type: Dx7BankRef, resolve: (payload) => payload.bank }),
+      dx7BankEdge: t.field({ type: Dx7BankEdgeRef, resolve: (payload) => payload.bank }),
+      created: t.boolean({ resolve: (payload) => payload.created }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundUpdateDx7Bank',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Dx7BankRef }),
+      name: t.string({ required: true }),
+      slots: t.stringList({ required: { list: true, items: false }, description: BANK_SLOTS_ARG }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the bank.' }),
+    }),
+  },
+  {
+    description: "Replace a bank's name and slots. Only the device key that saved it may; others get FORBIDDEN.",
+    resolve: async (_root, { input }, context) => {
+      dx7Write(context);
+      return { bank: await Dx7Banks.updateBank(input.id.id, input.name, slotIds(input.slots), input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      dx7Bank: t.field({ type: Dx7BankRef, resolve: (payload) => payload.bank }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundDeleteDx7Bank',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Dx7BankRef }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the bank.' }),
+    }),
+  },
+  {
+    description: 'Delete a bank for good (its voices stay). Only the device key that saved it may; others get FORBIDDEN.',
+    resolve: async (_root, { input }, context) => {
+      dx7Write(context);
+      return { id: await Dx7Banks.deleteBank(input.id.id, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      deletedDx7BankId: t.globalID({
+        description: 'The deleted bank, for `@deleteRecord`.',
+        resolve: (payload) => ({ type: 'Dx7Bank', id: payload.id }),
+      }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundSetDx7BankHidden',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Dx7BankRef }),
+      hidden: t.boolean({ required: true }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => ({ bank: await Dx7Banks.setBankHidden(input.id.id, input.hidden) }),
+  },
+  {
+    outputFields: (t) => ({
+      dx7Bank: t.field({ type: Dx7BankRef, resolve: (payload) => payload.bank }),
     }),
   },
 );
