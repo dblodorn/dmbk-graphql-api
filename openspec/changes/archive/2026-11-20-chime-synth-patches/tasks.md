@@ -19,6 +19,6 @@
 
 ## 4. Roll out (needs the user's go-ahead: production database and deploy)
 
-- [ ] 4.1 Run `npm run chime:collection` (report) then `-- --apply` on production; verify the report shows `patch` in the validator and existing documents still validate
-- [ ] 4.2 Merge to `main` (deploys); verify the deploy job passes and `graphql.dmbk.network` serves `SynthPatch` and `ChimeUnit.patch`
-- [ ] 4.3 Run `npm run test:mutations` against a local server; verify the chime and VZ suites pass and fixtures are cleaned up
+- [x] 4.1 Run `npm run chime:collection` (report) then `-- --apply` on production; verify the report shows `patch` in the validator and existing documents still validate
+- [x] 4.2 Merge to `main` (deploys); verify the deploy job passes and `graphql.dmbk.network` serves `SynthPatch` and `ChimeUnit.patch`
+- [x] 4.3 Run `npm run test:mutations` against a local server; verify the chime and VZ suites pass and fixtures are cleaned up
