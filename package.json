@@ -14,6 +14,7 @@
     "move:sound-snapshots": "tsx --env-file=.env scripts/move-sound-snapshots.ts",
     "chime:collection": "tsx --env-file=.env scripts/chime-compositions-collection.ts",
     "vz:collection": "tsx --env-file=.env scripts/vz-voices-collection.ts",
+    "vz:import": "tsx --env-file=.env scripts/vz-import-syx.ts",
     "api-client": "tsx --env-file=.env scripts/api-clients.ts"
   },
   "keywords": [],
