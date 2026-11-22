@@ -5,7 +5,8 @@ import type { PhotoDoc } from './models/photos.js';
 import type { GeneratedImageDoc, LoraTrainingDoc } from './models/lora.js';
 import type { ChimeCompositionDoc } from './models/chime.js';
 import type { VzVoiceDoc } from './models/vz.js';
-import type { Dx7VoiceDoc } from './models/dx7.js';
+import type { Dx7BankDoc, Dx7VoiceDoc } from './models/dx7.js';
+import { loadBanks as loadDx7Banks } from './lib/dx7/banks.js';
 import { ADMIN_SCOPE, PUBLIC_SCOPE, loadPhotos } from './lib/photos/repository.js';
 import { loadImages, loadTrainings } from './lib/lora/repository.js';
 import { loadCompositions } from './lib/chime/repository.js';
@@ -31,6 +32,7 @@ export interface ContextType {
   compositionLoader: DataLoader<string, ChimeCompositionDoc | null>;
   vzVoiceLoader: DataLoader<string, VzVoiceDoc | null>;
   dx7VoiceLoader: DataLoader<string, Dx7VoiceDoc | null>;
+  dx7BankLoader: DataLoader<string, Dx7BankDoc | null>;
 }
 
 export function createContext(
@@ -51,6 +53,7 @@ export function createContext(
     compositionLoader: new DataLoader((ids) => loadCompositions(ids, viewer?.isAdmin === true)),
     vzVoiceLoader: new DataLoader((ids) => loadVoices(ids, viewer?.isAdmin === true)),
     dx7VoiceLoader: new DataLoader((ids) => loadDx7Voices(ids, viewer?.isAdmin === true)),
+    dx7BankLoader: new DataLoader((ids) => loadDx7Banks(ids, viewer?.isAdmin === true)),
     ...initContextCache(),
   };
 }

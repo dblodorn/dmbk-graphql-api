@@ -15,7 +15,8 @@ import { ChimeCompositionRef } from './types/chime.js';
 import { listVisibleVoices } from '../lib/vz/repository.js';
 import { VzVoiceRef } from './types/vz.js';
 import { listVisibleVoices as listVisibleDx7Voices } from '../lib/dx7/repository.js';
-import { Dx7VoiceRef } from './types/dx7.js';
+import { Dx7BankRef, Dx7VoiceRef } from './types/dx7.js';
+import { listVisibleBanks as listVisibleDx7Banks } from '../lib/dx7/banks.js';
 
 builder.queryType({});
 
@@ -120,6 +121,18 @@ builder.queryField('dmbkSoundDx7Voices', (t) =>
       search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 10 characters.' }),
     },
     resolve: async (_root, args) => toConnection(await listVisibleDx7Voices(args, { creatorKey: args.creatorKey, search: args.search })),
+  }),
+);
+
+builder.queryField('dmbkSoundDx7Banks', (t) =>
+  t.connection({
+    type: Dx7BankRef,
+    description: 'Saved DX7 banks that are not hidden, newest first (the factory ROM cards among them). `creatorKey` narrows them to that device key\'s banks; `search` to names containing the text.',
+    args: {
+      creatorKey: t.arg.string({ description: 'A device key: only the banks it saved.' }),
+      search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 20 characters.' }),
+    },
+    resolve: async (_root, args) => toConnection(await listVisibleDx7Banks(args, { creatorKey: args.creatorKey, search: args.search })),
   }),
 );
 

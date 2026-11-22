@@ -9,6 +9,7 @@ import { ChimeCompositionNotFoundError } from './lib/chime/repository.js';
 import { ChimeSaveRateLimitedError } from './lib/chime/limits.js';
 import { VzVoiceNotFoundError } from './lib/vz/repository.js';
 import { Dx7VoiceNotFoundError } from './lib/dx7/repository.js';
+import { Dx7BankNotFoundError } from './lib/dx7/banks.js';
 import { VoiceWriteRateLimitedError } from './lib/synth-voices/limits.js';
 
 /**
@@ -30,6 +31,7 @@ const CODES: [new (...args: never[]) => Error, string][] = [
   [ChimeSaveRateLimitedError, 'RATE_LIMITED'],
   [VzVoiceNotFoundError, 'NOT_FOUND'],
   [Dx7VoiceNotFoundError, 'NOT_FOUND'],
+  [Dx7BankNotFoundError, 'NOT_FOUND'],
   [VoiceWriteRateLimitedError, 'RATE_LIMITED'],
 ];
 

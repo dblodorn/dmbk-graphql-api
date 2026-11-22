@@ -33,3 +33,15 @@ DX7 voices SHALL follow the VZ voices' rules for device-key ownership (stored as
 #### Scenario: Windchime fetches a DX7 patch
 - **WHEN** `node(id)` is asked for a saved DX7 voice's global id
 - **THEN** its `__typename` is `Dx7Voice` and `name` and `data` are the stored ones
+
+### Requirement: Banks
+DX7 banks SHALL be stored in `dmbk-sound.dx7_banks`, each a name (1–20 printable ASCII characters, checked like voice names) and exactly 32 slots holding a saved, visible DX7 voice's id or null. A bank is like a cartridge, and its slots may name anyone's voices. Banks SHALL follow the voices' rules for device-key ownership (the same `dx7-creator` hash), duplicates per key, update, delete, admin hiding, write budget and the newest-first listing (`dmbkSoundDx7Banks`, with `creatorKey` and `search` up to 20 characters). A slot whose voice is later deleted or hidden SHALL read as null. Deleting a bank SHALL NOT delete its voices.
+
+#### Scenario: A slot names a missing voice
+- **WHEN** a save sends a slot with a Dx7Voice ID that doesn't exist, or a VzVoice ID
+- **THEN** it fails with `BAD_USER_INPUT` and nothing is stored
+
+#### Scenario: Factory cards
+- **WHEN** the listing is read after the factory import
+- **THEN** it holds the banks ROM1A to ROM4B, each with its 32 voices in cartridge order, ROM1A first
+
