@@ -17,7 +17,7 @@ import { cursorFor } from '../../lib/cursor.js';
  * later synth's patch type implements it too.
  */
 export const SynthPatchRef = builder.interfaceRef<{ name: string; data: string }>('SynthPatch').implement({
-  description: "A patch in an external synth's library: its display name and its bytes. VzVoice and Dx7Voice are ones.",
+  description: "A patch in an external synth's library: its display name and its bytes. VzVoice, Dx7Voice and Juno60Voice are ones.",
   interfaces: [builder.nodeInterfaceRef()],
   fields: (t) => ({
     name: t.exposeString('name', { description: "The patch's display name; may be empty." }),

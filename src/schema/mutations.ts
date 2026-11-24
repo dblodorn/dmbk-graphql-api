@@ -27,6 +27,9 @@ import * as Dx7 from '../lib/dx7/repository.js';
 import { takeWrite as takeDx7Write } from '../lib/dx7/limits.js';
 import { Dx7BankEdgeRef, Dx7BankRef, Dx7VoiceEdgeRef, Dx7VoiceRef } from './types/dx7.js';
 import * as Dx7Banks from '../lib/dx7/banks.js';
+import * as Juno60 from '../lib/juno60/repository.js';
+import { takeWrite as takeJuno60Write } from '../lib/juno60/limits.js';
+import { Juno60VoiceEdgeRef, Juno60VoiceRef } from './types/juno60.js';
 import { InvalidInputError } from '../lib/cursor.js';
 import { decodeGlobalID } from '@pothos/plugin-relay';
 
@@ -788,6 +791,109 @@ builder.relayMutationField(
   {
     outputFields: (t) => ({
       dx7Bank: t.field({ type: Dx7BankRef, resolve: (payload) => payload.bank }),
+    }),
+  },
+);
+
+// ---------------------------------------------------------------------------
+// dmbk-sound: Roland Juno-60 patches (juno60), on the VZ voices' plan
+
+const JUNO60_DATA = "The 42 patch bytes (the juno60 editor's layout) as base64 (56 characters). The name is read from them.";
+
+/** Writes come only from a client app's server, which also forwards the visitor for the rate limit. */
+function juno60Write(context: { client: string | null; endUserIp: string | null }): void {
+  if (context.client === null) throw forbidden('Changing Juno-60 patches requires a client API key.');
+  takeJuno60Write(context.client, context.endUserIp);
+}
+
+builder.relayMutationField(
+  'dmbkSoundSaveJuno60Voice',
+  {
+    inputFields: (t) => ({
+      data: t.string({ required: true, description: JUNO60_DATA }),
+      creatorKey: t.string({ required: true, description: VZ_KEY }),
+    }),
+  },
+  {
+    description:
+      'Save a patch anonymously under a device key. The same key saving identical bytes again returns the stored patch with `created: false`. Obscene names are refused (BAD_USER_INPUT). Rate-limited per visitor (`X-End-User-IP`) and per client.',
+    resolve: async (_root, { input }, context) => {
+      juno60Write(context);
+      return Juno60.saveVoice(input.data, input.creatorKey);
+    },
+  },
+  {
+    outputFields: (t) => ({
+      juno60Voice: t.field({ type: Juno60VoiceRef, resolve: (payload) => payload.voice }),
+      juno60VoiceEdge: t.field({ type: Juno60VoiceEdgeRef, resolve: (payload) => payload.voice }),
+      created: t.boolean({ resolve: (payload) => payload.created }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundUpdateJuno60Voice',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Juno60VoiceRef }),
+      data: t.string({ required: true, description: JUNO60_DATA }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the patch.' }),
+    }),
+  },
+  {
+    description: "Replace a patch's bytes (renaming it too, since the name is in them). Only the device key that saved it may; others get FORBIDDEN.",
+    resolve: async (_root, { input }, context) => {
+      juno60Write(context);
+      return { voice: await Juno60.updateVoice(input.id.id, input.data, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      juno60Voice: t.field({ type: Juno60VoiceRef, resolve: (payload) => payload.voice }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundDeleteJuno60Voice',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Juno60VoiceRef }),
+      creatorKey: t.string({ required: true, description: 'The device key that saved the patch.' }),
+    }),
+  },
+  {
+    description: 'Delete a patch for good. Only the device key that saved it may; others get FORBIDDEN.',
+    resolve: async (_root, { input }, context) => {
+      juno60Write(context);
+      return { id: await Juno60.deleteVoice(input.id.id, input.creatorKey) };
+    },
+  },
+  {
+    outputFields: (t) => ({
+      deletedJuno60VoiceId: t.globalID({
+        description: 'The deleted patch, for `@deleteRecord`.',
+        resolve: (payload) => ({ type: 'Juno60Voice', id: payload.id }),
+      }),
+    }),
+  },
+);
+
+builder.relayMutationField(
+  'dmbkSoundSetJuno60VoiceHidden',
+  {
+    inputFields: (t) => ({
+      id: t.globalID({ required: true, for: Juno60VoiceRef }),
+      hidden: t.boolean({ required: true }),
+    }),
+  },
+  {
+    authScopes: { admin: true },
+    resolve: async (_root, { input }) => ({ voice: await Juno60.setVoiceHidden(input.id.id, input.hidden) }),
+  },
+  {
+    outputFields: (t) => ({
+      juno60Voice: t.field({ type: Juno60VoiceRef, resolve: (payload) => payload.voice }),
     }),
   },
 );
