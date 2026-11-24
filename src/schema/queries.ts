@@ -17,6 +17,8 @@ import { VzVoiceRef } from './types/vz.js';
 import { listVisibleVoices as listVisibleDx7Voices } from '../lib/dx7/repository.js';
 import { Dx7BankRef, Dx7VoiceRef } from './types/dx7.js';
 import { listVisibleBanks as listVisibleDx7Banks } from '../lib/dx7/banks.js';
+import { listVisibleVoices as listVisibleJuno60Voices } from '../lib/juno60/repository.js';
+import { Juno60VoiceRef } from './types/juno60.js';
 
 builder.queryType({});
 
@@ -121,6 +123,18 @@ builder.queryField('dmbkSoundDx7Voices', (t) =>
       search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 10 characters.' }),
     },
     resolve: async (_root, args) => toConnection(await listVisibleDx7Voices(args, { creatorKey: args.creatorKey, search: args.search })),
+  }),
+);
+
+builder.queryField('dmbkSoundJuno60Voices', (t) =>
+  t.connection({
+    type: Juno60VoiceRef,
+    description: 'Saved Juno-60 patches that are not hidden, newest first (Roland\'s factory patches among them). `creatorKey` narrows them to that device key\'s patches; `search` to names containing the text.',
+    args: {
+      creatorKey: t.arg.string({ description: 'A device key: only the patches it saved.' }),
+      search: t.arg.string({ description: 'Names containing this text, ignoring case; at most 16 characters.' }),
+    },
+    resolve: async (_root, args) => toConnection(await listVisibleJuno60Voices(args, { creatorKey: args.creatorKey, search: args.search })),
   }),
 );
 

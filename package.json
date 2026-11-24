@@ -18,6 +18,8 @@
     "dx7:collection": "tsx --env-file=.env scripts/dx7-voices-collection.ts",
     "dx7:banks-collection": "tsx --env-file=.env scripts/dx7-banks-collection.ts",
     "dx7:import": "tsx --env-file=.env scripts/dx7-import-syx.ts",
+    "juno60:collection": "tsx --env-file=.env scripts/juno60-voices-collection.ts",
+    "juno60:import": "tsx --env-file=.env scripts/juno60-import.ts",
     "api-client": "tsx --env-file=.env scripts/api-clients.ts"
   },
   "keywords": [],
