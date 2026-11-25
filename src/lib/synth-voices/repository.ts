@@ -20,6 +20,10 @@ const newestFirst = { createdAt: -1, _id: -1 } as const;
 const isDuplicateKey = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 11000;
 
+/** Fields kept beside a voice's bytes, for synths that have them (the Juno-60's arpeggio). Absent means none. */
+export type VoiceExtra = Pick<SynthVoiceDoc, 'arpeggio'>;
+const EXTRA_KEYS = ['arpeggio'] as const;
+
 export interface VoiceFilter {
   /** Only this device key's voices. */
   creatorKey?: string | null;
@@ -29,20 +33,25 @@ export interface VoiceFilter {
 
 export function voiceRepository(model: Model<SynthVoiceDoc>, shape: VoiceShape, NotFound: new (id: string) => Error) {
   /** The bytes, their name and fingerprint, or `InvalidInputError` (bad data, refused name). */
-  function checked(data: string): { name: string; print: string } {
+  // The fingerprint covers the extras too, so the same bytes with two different arpeggios are two voices; with no
+  // extras it's the bytes' alone, as it always was, so stored fingerprints never change.
+  function checked(data: string, extra: VoiceExtra): { name: string; print: string } {
     const bytes = shape.decodeVoice(data);
     const name = shape.voiceName(bytes);
     if (!isNameAllowed(name)) throw new InvalidInputError(`name: "${name}" isn't allowed. Rename the voice and save again.`);
-    return { name, print: shape.fingerprint(bytes) };
+    const kept = EXTRA_KEYS.filter((k) => extra[k] !== undefined);
+    if (!kept.length) return { name, print: shape.fingerprint(bytes) };
+    const extras = JSON.stringify(kept.map((k) => [k, extra[k]]));
+    return { name, print: crypto.createHash('sha256').update(bytes).update(extras).digest('hex') };
   }
 
   /**
    * Save a voice for a device key, or return the identical one that key already saved (`created: false`). The
    * unique (creatorHash, fingerprint) index settles two identical saves racing each other.
    */
-  async function saveVoice(data: string, creatorKey: string): Promise<{ voice: SynthVoiceDoc; created: boolean }> {
+  async function saveVoice(data: string, creatorKey: string, extra: VoiceExtra = {}): Promise<{ voice: SynthVoiceDoc; created: boolean }> {
     const owner = shape.creatorHash(creatorKey);
-    const { name, print } = checked(data);
+    const { name, print } = checked(data, extra);
     const now = new Date().toISOString();
     const doc: SynthVoiceDoc = {
       _id: crypto.randomBytes(12).toString('hex'),
@@ -52,6 +61,7 @@ export function voiceRepository(model: Model<SynthVoiceDoc>, shape: VoiceShape, 
       fingerprint: print,
       creatorHash: owner,
       hidden: false,
+      ...(extra.arpeggio ? { arpeggio: extra.arpeggio } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -78,14 +88,20 @@ export function voiceRepository(model: Model<SynthVoiceDoc>, shape: VoiceShape, 
     return doc;
   }
 
-  /** Replace a voice's bytes (and so its name). Its place in the newest-first listing stays where it was saved. */
-  async function updateVoice(id: string, data: string, creatorKey: string): Promise<SynthVoiceDoc> {
+  /**
+   * Replace a voice's bytes (and so its name) and its extras: extras not given are removed. Its place in the
+   * newest-first listing stays where it was saved.
+   */
+  async function updateVoice(id: string, data: string, creatorKey: string, extra: VoiceExtra = {}): Promise<SynthVoiceDoc> {
     const doc = await owned(id, creatorKey);
-    const { name, print } = checked(data);
+    const { name, print } = checked(data, extra);
+    const set: Record<string, unknown> = { name, data, fingerprint: print, updatedAt: new Date().toISOString() };
+    const unset: Record<string, ''> = {};
+    for (const k of EXTRA_KEYS) if (extra[k] !== undefined) set[k] = extra[k]; else unset[k] = '';
     try {
       const updated = await model.findOneAndUpdate(
         { _id: id, creatorHash: doc.creatorHash, hidden: false },
-        { $set: { name, data, fingerprint: print, updatedAt: new Date().toISOString() } },
+        { $set: set, $unset: unset },
         { new: true },
       ).lean<SynthVoiceDoc>().exec();
       if (!updated) throw new NotFound(id);

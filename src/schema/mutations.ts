@@ -29,7 +29,8 @@ import { Dx7BankEdgeRef, Dx7BankRef, Dx7VoiceEdgeRef, Dx7VoiceRef } from './type
 import * as Dx7Banks from '../lib/dx7/banks.js';
 import * as Juno60 from '../lib/juno60/repository.js';
 import { takeWrite as takeJuno60Write } from '../lib/juno60/limits.js';
-import { Juno60VoiceEdgeRef, Juno60VoiceRef } from './types/juno60.js';
+import { Juno60ArpeggioInputRef, Juno60VoiceEdgeRef, Juno60VoiceRef } from './types/juno60.js';
+import { checkArpeggio, type Arpeggio } from '../lib/juno60/arpeggio.js';
 import { InvalidInputError } from '../lib/cursor.js';
 import { decodeGlobalID } from '@pothos/plugin-relay';
 
@@ -799,6 +800,7 @@ builder.relayMutationField(
 // dmbk-sound: Roland Juno-60 patches (juno60), on the VZ voices' plan
 
 const JUNO60_DATA = "The 42 patch bytes (the juno60 editor's layout) as base64 (56 characters). The name is read from them.";
+const JUNO60_ARPEGGIO = 'The arpeggiator settings to keep beside the bytes; omitted or the default means none (the arpeggiator off).';
 
 /** Writes come only from a client app's server, which also forwards the visitor for the rate limit. */
 function juno60Write(context: { client: string | null; endUserIp: string | null }): void {
@@ -811,15 +813,16 @@ builder.relayMutationField(
   {
     inputFields: (t) => ({
       data: t.string({ required: true, description: JUNO60_DATA }),
+      arpeggio: t.field({ type: Juno60ArpeggioInputRef, description: JUNO60_ARPEGGIO }),
       creatorKey: t.string({ required: true, description: VZ_KEY }),
     }),
   },
   {
     description:
-      'Save a patch anonymously under a device key. The same key saving identical bytes again returns the stored patch with `created: false`. Obscene names are refused (BAD_USER_INPUT). Rate-limited per visitor (`X-End-User-IP`) and per client.',
+      'Save a patch anonymously under a device key. The same key saving identical bytes and arpeggio again returns the stored patch with `created: false`. Obscene names are refused (BAD_USER_INPUT). Rate-limited per visitor (`X-End-User-IP`) and per client.',
     resolve: async (_root, { input }, context) => {
       juno60Write(context);
-      return Juno60.saveVoice(input.data, input.creatorKey);
+      return Juno60.saveVoice(input.data, input.creatorKey, { arpeggio: checkArpeggio(input.arpeggio as Arpeggio | null | undefined) });
     },
   },
   {
@@ -837,6 +840,7 @@ builder.relayMutationField(
     inputFields: (t) => ({
       id: t.globalID({ required: true, for: Juno60VoiceRef }),
       data: t.string({ required: true, description: JUNO60_DATA }),
+      arpeggio: t.field({ type: Juno60ArpeggioInputRef, description: `${JUNO60_ARPEGGIO} Omitted removes the stored settings.` }),
       creatorKey: t.string({ required: true, description: 'The device key that saved the patch.' }),
     }),
   },
@@ -844,7 +848,7 @@ builder.relayMutationField(
     description: "Replace a patch's bytes (renaming it too, since the name is in them). Only the device key that saved it may; others get FORBIDDEN.",
     resolve: async (_root, { input }, context) => {
       juno60Write(context);
-      return { voice: await Juno60.updateVoice(input.id.id, input.data, input.creatorKey) };
+      return { voice: await Juno60.updateVoice(input.id.id, input.data, input.creatorKey, { arpeggio: checkArpeggio(input.arpeggio as Arpeggio | null | undefined) }) };
     },
   },
   {

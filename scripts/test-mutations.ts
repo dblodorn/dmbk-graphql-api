@@ -243,6 +243,74 @@ async function deleteDx7Fixtures(): Promise<number> {
   return result.deletedCount;
 }
 
+// Fixed device keys for the Juno-60 suite.
+const TEST_JUNO60_KEY_A = 'test-juno60-creator-a-000000000000000000000';
+const TEST_JUNO60_KEY_B = 'test-juno60-creator-b-000000000000000000000';
+
+async function deleteJuno60Fixtures(): Promise<number> {
+  const { Juno60VoiceModel } = await import('../src/models/juno60.js');
+  const { creatorHash } = await import('../src/lib/juno60/shape.js');
+  const result = await Juno60VoiceModel.deleteMany({ creatorHash: { $in: [creatorHash(TEST_JUNO60_KEY_A), creatorHash(TEST_JUNO60_KEY_B)] } });
+  return result.deletedCount;
+}
+
+// ---------------------------------------------------------------------------
+// Juno-60 patches: the same library plan again, so this checks the format, the SynthPatch type and what only the
+// Juno-60 has: arpeggiator settings kept beside the bytes.
+
+const JUNO60_FIELDS = 'id name data arpeggio { version on mode range rate } createdAt updatedAt';
+const SAVE_JUNO60 = `mutation($input: DmbkSoundSaveJuno60VoiceInput!, $key: String!) { dmbkSoundSaveJuno60Voice(input: $input) {
+  created juno60Voice { ${JUNO60_FIELDS} yours(creatorKey: $key) } } }`;
+const UPDATE_JUNO60 = `mutation($input: DmbkSoundUpdateJuno60VoiceInput!) { dmbkSoundUpdateJuno60Voice(input: $input) { juno60Voice { ${JUNO60_FIELDS} } } }`;
+const DELETE_JUNO60 = `mutation($input: DmbkSoundDeleteJuno60VoiceInput!) { dmbkSoundDeleteJuno60Voice(input: $input) { deletedJuno60VoiceId } }`;
+
+/** 42 patch bytes as base64, with `name` at offset 26 and a random body (kept within each field's range). */
+function juno60Voice(name: string): string {
+  const bytes = Buffer.alloc(42);
+  for (let i = 0; i < 16; i++) bytes[i] = crypto.randomInt(128);
+  Buffer.from(name.padEnd(16, ' ').slice(0, 16), 'ascii').copy(bytes, 26);
+  return bytes.toString('base64');
+}
+
+async function juno60Suite(): Promise<void> {
+  console.log('\nJuno-60 patches');
+  const A = TEST_JUNO60_KEY_A, B = TEST_JUNO60_KEY_B;
+  const arp = { version: 1, on: true, mode: 'UP_DOWN', range: 2, rate: 90 };
+  const save = (data: string, extra: Record<string, unknown> = {}, creatorKey = A) =>
+    gql(SAVE_JUNO60, { input: { data, creatorKey, ...extra }, key: creatorKey }, undefined, { endUserIp: visitor() });
+  const write = (query: string, input: Record<string, unknown>) => gql(query, { input }, undefined, { endUserIp: visitor() });
+  const refused = async (name: string, res: Promise<{ data?: any; errors?: GqlError[] }>, codes = ['BAD_USER_INPUT']) => {
+    const { errors } = await res;
+    check(`${name} → ${codes.join('/')}`, codes.includes(codesOf(errors)[0] ?? ''), errors);
+  };
+
+  try {
+    const data = juno60Voice('TEST STRINGS');
+    const plain = (await save(data)).data?.dmbkSoundSaveJuno60Voice;
+    check('save: created, the name read from bytes 26–41, no arpeggio', plain?.created === true && plain.juno60Voice.name === 'TEST STRINGS' && plain.juno60Voice.arpeggio === null, plain);
+    const asPatch = (await ok(SYNTH_PATCH_NODE, { id: plain?.juno60Voice.id })).node;
+    check('node(id) through SynthPatch: a Juno60Voice', asPatch?.__typename === 'Juno60Voice' && asPatch.data === data, asPatch);
+    const withArp = (await save(data, { arpeggio: arp })).data?.dmbkSoundSaveJuno60Voice;
+    check('the same bytes with an arpeggio: a second patch, the settings back as sent',
+      withArp?.created === true && withArp.juno60Voice.id !== plain?.juno60Voice.id && JSON.stringify(withArp.juno60Voice.arpeggio) === JSON.stringify(arp), withArp);
+    check('the same bytes and arpeggio again: the stored one', (await save(data, { arpeggio: arp })).data?.dmbkSoundSaveJuno60Voice?.juno60Voice.id === withArp?.juno60Voice.id);
+    const asDefault = (await save(data, { arpeggio: { version: 1, on: false, mode: 'UP', range: 1, rate: 64 } })).data?.dmbkSoundSaveJuno60Voice;
+    check('default settings are stored as none: the plain patch', asDefault?.created === false && asDefault.juno60Voice.id === plain?.juno60Voice.id, asDefault);
+    await refused('arpeggio range 4', save(juno60Voice('TEST RANGE'), { arpeggio: { ...arp, range: 4 } }));
+    await refused('arpeggio version 2', save(juno60Voice('TEST VERSION'), { arpeggio: { ...arp, version: 2 } }));
+    await refused('data not 42 bytes (a DX7 voice)', save(dx7Voice('TEST WRONG')));
+
+    const id = withArp?.juno60Voice.id;
+    const cleared = (await write(UPDATE_JUNO60, { id, data, creatorKey: A })).data?.dmbkSoundUpdateJuno60Voice?.juno60Voice;
+    check('update without arpeggio removes it', cleared?.arpeggio === null, cleared);
+    await refused('update by another key', write(UPDATE_JUNO60, { id, data, arpeggio: arp, creatorKey: B }), ['FORBIDDEN']);
+    const del = (await write(DELETE_JUNO60, { id: plain?.juno60Voice.id, creatorKey: A })).data?.dmbkSoundDeleteJuno60Voice;
+    check('delete by its key', del?.deletedJuno60VoiceId === plain?.juno60Voice.id, del);
+  } finally {
+    await deleteJuno60Fixtures().catch((e) => console.error('  ! Juno-60 cleanup failed (run --cleanup):', e));
+  }
+}
+
 async function cleanup(): Promise<void> {
   // Only documents this script creates: marked fixtures, and the .invalid test accounts.
   await withDb(async ({ LoraTrainingModel, GeneratedImageModel }) => {
@@ -254,10 +322,11 @@ async function cleanup(): Promise<void> {
     const chimes = await deleteChimeFixtures();
     const voices = await deleteVzFixtures();
     const dx7Voices = await deleteDx7Fixtures();
+    const juno60Voices = await deleteJuno60Fixtures();
     console.log(
       `Deleted ${trainings.deletedCount} fixture training(s), ${images.deletedCount} fixture image(s), ` +
         `${photos} upload fixture photo(s), ${chimes} fixture composition(s), ${voices} fixture VZ voice(s), ` +
-        `${dx7Voices} fixture DX7 voice(s), ` +
+        `${dx7Voices} fixture DX7 voice(s), ${juno60Voices} fixture Juno-60 patch(es), ` +
         `${accounts} test account(s), ${keys} test API key(s).`,
     );
   });
@@ -1410,6 +1479,7 @@ async function main(): Promise<void> {
     await chimeSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await vzSuite(admin.token, accounts[MEMBER_EMAIL].token);
     await dx7Suite(admin.token, accounts[MEMBER_EMAIL].token);
+    await juno60Suite();
     const stub = await startArenaStub();
     try {
       await arenaSuite(accounts[MEMBER_EMAIL].token);

@@ -1,5 +1,6 @@
 import { Schema } from 'mongoose';
 import { soundDb } from '../db/mongoose.js';
+import type { Arpeggio } from '../lib/juno60/arpeggio.js';
 
 /*
  * One saved voice of an emulated synth (vz10m's VZ-10M voices, dx7's DX7 voices), each synth in its own
@@ -21,6 +22,8 @@ export interface SynthVoiceDoc {
   /** SHA-256 of the saving browser's device key; never exposed. */
   creatorHash: string;
   hidden: boolean;
+  /** Juno-60 only: its arpeggiator settings, beside the bytes (`lib/juno60/arpeggio.ts`). Absent means off. */
+  arpeggio?: Arpeggio;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +38,7 @@ export function synthVoiceModel(modelName: string, collection: string) {
       fingerprint: { type: String, required: true },
       creatorHash: { type: String, required: true },
       hidden: { type: Boolean, required: true },
+      arpeggio: { type: Schema.Types.Mixed, required: false }, // only the Juno-60 validator allows it
       createdAt: { type: String, required: true },
       updatedAt: { type: String, required: true },
     },
