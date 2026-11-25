@@ -4,6 +4,34 @@ import { DATA_LENGTH, VOICE_BYTES } from '../../lib/juno60/shape.js';
 import { isCreator } from '../../lib/juno60/repository.js';
 import { cursorFor } from '../../lib/cursor.js';
 import { SynthPatchRef } from './vz.js';
+import { ARPEGGIO_MODES, type Arpeggio } from '../../lib/juno60/arpeggio.js';
+
+export const Juno60ArpeggioModeEnum = builder.enumType('Juno60ArpeggioMode', {
+  description: 'The arpeggio\'s direction: UP, DOWN, or UP_DOWN (up then down, the top and bottom notes not repeated).',
+  values: Object.fromEntries(ARPEGGIO_MODES.map((m) => [m, { value: m }])) as Record<(typeof ARPEGGIO_MODES)[number], { value: (typeof ARPEGGIO_MODES)[number] }>,
+});
+
+export const Juno60ArpeggioRef = builder.objectRef<Arpeggio>('Juno60Arpeggio').implement({
+  description: "A patch's arpeggiator settings, kept beside its 42 bytes (never inside them). HOLD is a performance switch and isn't saved.",
+  fields: (t) => ({
+    version: t.exposeInt('version', { description: 'The settings version: 1.' }),
+    on: t.exposeBoolean('on'),
+    mode: t.field({ type: Juno60ArpeggioModeEnum, resolve: (a) => a.mode }),
+    range: t.exposeInt('range', { description: 'Octaves: 1, 2 or 3.' }),
+    rate: t.exposeInt('rate', { description: '0–127, read on the panel\'s 0–10 scale.' }),
+  }),
+});
+
+export const Juno60ArpeggioInputRef = builder.inputType('Juno60ArpeggioInput', {
+  description: 'Arpeggiator settings to keep with a patch. Settings equal to the default (off, UP, range 1, rate 64) are stored as none.',
+  fields: (t) => ({
+    version: t.int({ required: true, description: '1.' }),
+    on: t.boolean({ required: true }),
+    mode: t.field({ type: Juno60ArpeggioModeEnum, required: true }),
+    range: t.int({ required: true, description: 'Octaves: 1, 2 or 3.' }),
+    rate: t.int({ required: true, description: '0–127.' }),
+  }),
+});
 
 /*
  * Saved Roland Juno-60 patches (openspec/specs/juno60-voices), saved anonymously by the juno60 editor
@@ -23,6 +51,12 @@ builder.node(Juno60VoiceRef, {
   fields: (t) => ({
     name: t.exposeString('name', { description: "The patch's name, read from the bytes; may be empty." }),
     data: t.exposeString('data', { description: `The ${VOICE_BYTES} patch bytes (the juno60 editor's layout) as base64 (${DATA_LENGTH} characters).` }),
+    arpeggio: t.field({
+      type: Juno60ArpeggioRef,
+      nullable: true,
+      description: 'The arpeggiator settings kept with the patch; null means the arpeggiator is off.',
+      resolve: (v) => v.arpeggio ?? null,
+    }),
     createdAt: t.exposeString('createdAt', { description: 'ISO-8601. The listing is ordered by this.' }),
     updatedAt: t.exposeString('updatedAt', { description: 'ISO-8601. Equals createdAt until the patch is updated.' }),
     yours: t.boolean({
