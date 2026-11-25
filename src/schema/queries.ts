@@ -97,8 +97,11 @@ builder.queryField('dmbkSoundPlaylists', (t) =>
 builder.queryField('dmbkSoundChimeCompositions', (t) =>
   t.connection({
     type: ChimeCompositionRef,
-    description: 'Saved windchime compositions that are not hidden, newest first.',
-    resolve: async (_root, args) => toConnection(await listVisibleCompositions(args)),
+    description: "Saved windchime compositions that are not hidden, newest first. `creatorKey` narrows them to the compositions that device key created.",
+    args: {
+      creatorKey: t.arg.string({ description: 'A device key: only the compositions it created.' }),
+    },
+    resolve: async (_root, args) => toConnection(await listVisibleCompositions(args, { creatorKey: args.creatorKey })),
   }),
 );
 

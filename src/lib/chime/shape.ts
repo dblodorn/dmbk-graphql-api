@@ -110,7 +110,7 @@ export const UnitInputSchema = z
 
 export const UnitsInputSchema = z.array(UnitInputSchema).min(1).max(MAX_UNITS);
 
-/** The collection validator: document and unit, every field but `instrument` and `patch` required, nothing else allowed. */
+/** The collection validator: document and unit, every field but `instrument`, `patch` and `creatorHash` required, nothing else allowed. */
 export function compositionJsonSchema(): Record<string, unknown> {
   const intProps = Object.fromEntries(
     Object.entries(INT_FIELDS).map(([name, [minimum, maximum]]) => [name, { bsonType: 'int', minimum, maximum }]),
@@ -142,6 +142,8 @@ export function compositionJsonSchema(): Record<string, unknown> {
       fingerprint: { bsonType: 'string', pattern: '^[0-9a-f]{64}$' },
       hidden: { bsonType: 'bool' },
       createdAt: { bsonType: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$' },
+      // allowed, not required: compositions saved without a device key, and every one stored before keys, have none
+      creatorHash: { bsonType: 'string', pattern: '^[0-9a-f]{64}$' },
     },
   };
 }

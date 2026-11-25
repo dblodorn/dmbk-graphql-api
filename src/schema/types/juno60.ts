@@ -46,7 +46,7 @@ builder.node(Juno60VoiceRef, {
   interfaces: [SynthPatchRef],
   id: { resolve: (v) => v._id },
   // every synth's voice documents have the same fields, so the data's length tells a Juno-60 patch from another synth's
-  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && (value as Juno60VoiceDoc).data.length === DATA_LENGTH,
+  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && 'data' in value && (value as Juno60VoiceDoc).data.length === DATA_LENGTH,
   loadMany: (ids, context) => Promise.all(ids.map((id) => context.juno60VoiceLoader.load(id))),
   fields: (t) => ({
     name: t.exposeString('name', { description: "The patch's name, read from the bytes; may be empty." }),

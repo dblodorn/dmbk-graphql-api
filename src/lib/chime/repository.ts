@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { ChimeCompositionModel, type ChimeCompositionDoc } from '../../models/chime.js';
 import { InvalidInputError, paginate, type Page, type PageArgs } from '../cursor.js';
+import { creatorHash } from '../device-key.js';
 import { fingerprint } from './fingerprint.js';
 import { UnitsInputSchema } from './shape.js';
 import { compositionTitle } from './title.js';
@@ -9,8 +10,11 @@ import { compositionTitle } from './title.js';
  * Every chime-composition query and write goes through this module, and
  * visibility is decided here only. Public = `hidden: false`; admins see
  * everything. Saves are anonymous: a document records the units and what the
- * API derived from them, never who or where it came from.
+ * API derived from them, never who or where it came from. A save may carry the
+ * browser's device key; only its hash is kept, on the composition it created.
  */
+
+const CREATOR_SALT = 'chime-creator';
 
 export class ChimeCompositionNotFoundError extends Error {
   constructor(id: string) {
@@ -36,9 +40,11 @@ function invalid(issue: { path: PropertyKey[]; message: string }): InvalidInputE
 /**
  * Save a composition, or return the identical one already stored
  * (`created: false`). The unique fingerprint index settles two identical saves
- * racing each other.
+ * racing each other. The creator's hash goes only on a new document: a
+ * duplicate is returned untouched, so another key never takes it over.
  */
-export async function saveComposition(input: unknown): Promise<{ composition: ChimeCompositionDoc; created: boolean }> {
+export async function saveComposition(input: unknown, creatorKey?: string | null): Promise<{ composition: ChimeCompositionDoc; created: boolean }> {
+  const owner = creatorKey == null ? undefined : creatorHash(CREATOR_SALT, creatorKey);
   const parsed = UnitsInputSchema.safeParse(input);
   if (!parsed.success) throw invalid(parsed.error.issues[0]);
   const units = parsed.data;
@@ -52,6 +58,7 @@ export async function saveComposition(input: unknown): Promise<{ composition: Ch
     fingerprint: print,
     hidden: false,
     createdAt: new Date().toISOString(),
+    ...(owner ? { creatorHash: owner } : {}),
   };
   try {
     await ChimeCompositionModel.create(doc);
@@ -64,11 +71,23 @@ export async function saveComposition(input: unknown): Promise<{ composition: Ch
   }
 }
 
-/** The public listing: visible, newest first. */
-export function listVisibleCompositions(args: PageArgs): Promise<Page<ChimeCompositionDoc>> {
-  return paginate(args, { ...PUBLIC_FILTER }, (filter, limit) =>
+/** The public listing: visible, newest first, optionally only the compositions one device key created. */
+export function listVisibleCompositions(args: PageArgs, { creatorKey }: { creatorKey?: string | null } = {}): Promise<Page<ChimeCompositionDoc>> {
+  const filter: Record<string, unknown> = { ...PUBLIC_FILTER };
+  if (creatorKey) filter.creatorHash = creatorHash(CREATOR_SALT, creatorKey);
+  return paginate(args, filter, (filter, limit) =>
     ChimeCompositionModel.find(filter).sort(newestFirst).limit(limit).lean<ChimeCompositionDoc[]>().exec(),
   );
+}
+
+/** Whether a device key created this composition. A malformed key, or a composition without an owner, is false. */
+export function isCompositionCreator(doc: ChimeCompositionDoc, creatorKey: string): boolean {
+  if (!doc.creatorHash) return false;
+  try {
+    return doc.creatorHash === creatorHash(CREATOR_SALT, creatorKey);
+  } catch {
+    return false;
+  }
 }
 
 /** By id, in input order. Hidden ones are null except for admins, indistinguishable from missing. */

@@ -441,6 +441,7 @@ builder.relayMutationField(
   {
     inputFields: (t) => ({
       units: t.field({ type: [ChimeUnitInputRef], required: true, description: 'The chimes in page order, 1–16.' }),
+      creatorKey: t.string({ description: `${VZ_KEY} Marks a newly created composition as that key's; a duplicate keeps its owner.` }),
     }),
   },
   {
@@ -450,7 +451,7 @@ builder.relayMutationField(
       // Only a client app's server saves, even while keyless requests still run as legacy.
       if (context.client === null) throw forbidden('Saving a composition requires a client API key.');
       takeSave(context.client, context.endUserIp);
-      return saveComposition(input.units);
+      return saveComposition(input.units, input.creatorKey);
     },
   },
   {

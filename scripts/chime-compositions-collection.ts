@@ -30,6 +30,8 @@ const COLLECTION = flag > 0 ? process.argv[flag + 1] : 'chime_compositions';
 const INDEXES = [
   { key: { fingerprint: 1 }, name: 'fingerprint_1', unique: true },
   { key: { hidden: 1, createdAt: -1, _id: -1 }, name: 'hidden_1_createdAt_-1__id_-1' },
+  // one device key's compositions, newest first (only documents that have an owner)
+  { key: { creatorHash: 1, createdAt: -1, _id: -1 }, name: 'creatorHash_1_createdAt_-1__id_-1', partialFilterExpression: { creatorHash: { $exists: true } } },
 ] as const;
 
 async function main(): Promise<void> {
