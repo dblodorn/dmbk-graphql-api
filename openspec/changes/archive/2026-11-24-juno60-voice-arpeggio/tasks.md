@@ -10,4 +10,4 @@
 ## 2. Deploy
 
 - [x] 2.1 `npm run juno60:collection -- --apply` before merging; verify it reports the validator up to date
-- [ ] 2.2 Merge and deploy; verify production returns `arpeggio: null` for the factory patches
+- [x] 2.2 Merge and deploy; verify production returns `arpeggio: null` for the factory patches (confirmed 2026-11-24: STRINGS 1–3 return arpeggio: null)
