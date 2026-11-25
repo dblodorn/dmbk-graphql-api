@@ -32,7 +32,7 @@ builder.node(VzVoiceRef, {
   interfaces: [SynthPatchRef],
   id: { resolve: (v) => v._id },
   // every synth's voice documents have the same fields, so the data's length tells a VZ voice from another synth's
-  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && (value as VzVoiceDoc).data.length === DATA_LENGTH,
+  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && 'data' in value && (value as VzVoiceDoc).data.length === DATA_LENGTH,
   loadMany: (ids, context) => Promise.all(ids.map((id) => context.vzVoiceLoader.load(id))),
   fields: (t) => ({
     name: t.exposeString('name', { description: "The voice's name as the VZ shows it, read from the bytes; may be empty." }),

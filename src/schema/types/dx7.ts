@@ -19,7 +19,7 @@ builder.node(Dx7VoiceRef, {
   interfaces: [SynthPatchRef],
   id: { resolve: (v) => v._id },
   // every synth's voice documents have the same fields, so the data's length tells a DX7 voice from another synth's
-  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && (value as Dx7VoiceDoc).data.length === DATA_LENGTH,
+  isTypeOf: (value) => typeof value === 'object' && value !== null && 'creatorHash' in value && 'data' in value && (value as Dx7VoiceDoc).data.length === DATA_LENGTH,
   loadMany: (ids, context) => Promise.all(ids.map((id) => context.dx7VoiceLoader.load(id))),
   fields: (t) => ({
     name: t.exposeString('name', { description: "The voice's name as the DX7 shows it, read from the bytes; may be empty." }),

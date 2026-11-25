@@ -23,6 +23,8 @@ export interface ChimeCompositionDoc {
   fingerprint: string;
   hidden: boolean;
   createdAt: string;
+  /** `sha256("chime-creator:" + device key)` of the key that created it; absent for keyless saves and older ones. */
+  creatorHash?: string;
 }
 
 const unitSchema = new Schema<ChimeUnit>(
@@ -57,6 +59,7 @@ const chimeCompositionSchema = new Schema<ChimeCompositionDoc>(
     fingerprint: { type: String, required: true },
     hidden: { type: Boolean, required: true },
     createdAt: { type: String, required: true },
+    creatorHash: String,
   },
   { ...docOptions, collection: 'chime_compositions' },
 );
