@@ -9,4 +9,4 @@
 
 ## 2. Ship
 
-- [ ] 2.1 Apply the validator and index to `dmbk-sound.chime_compositions`, deploy, and verify on production that a keyed save sets `yours` and the narrowed listing returns it
+- [x] 2.1 Apply the validator and index to `dmbk-sound.chime_compositions`, deploy, and verify on production that a keyed save sets `yours` and the narrowed listing returns it
