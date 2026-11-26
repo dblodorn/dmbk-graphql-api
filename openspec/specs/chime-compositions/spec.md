@@ -6,7 +6,7 @@ How compositions made in windchime (the Chime player at chime.dmbk.io) are saved
 ## Requirements
 
 ### Requirement: Composition storage
-Compositions SHALL be stored in the `chime_compositions` collection of the `dmbk-sound` database, and this API SHALL be the collection's owner and only writer. Each document SHALL hold exactly these fields: `_id` (a 24-character lowercase hex string assigned by the API), `schemaVersion` (1), `title`, `units` (1–16 unit objects, in page order), `fingerprint` (64 lowercase hex characters), `hidden` (boolean), and `createdAt` (ISO-8601 string). Each unit object SHALL hold exactly:
+Compositions SHALL be stored in the `chime_compositions` collection of the `dmbk-sound` database, and this API SHALL be the collection's owner and only writer. Each document SHALL hold exactly these fields: `_id` (a 24-character lowercase hex string assigned by the API), `schemaVersion` (1), `title`, `units` (1–16 unit objects, in page order), `fingerprint` (64 lowercase hex characters), `hidden` (boolean), and `createdAt` (ISO-8601 string), and MAY hold `creatorHash` (64 lowercase hex characters; see "Device key ownership"). Each unit object SHALL hold exactly:
 - `volume`: integer 0–100 (percent)
 - `tubes`: integer 2–8
 - `wind`: integer 0–100 (percent)
@@ -28,7 +28,7 @@ A unit object MAY also hold `patch` and `instrument`.
 
 `instrument` is either `"chime"` (the tube chime) or `"furin"` (the furin bell). Every unit the API saves SHALL hold it. A stored unit without it SHALL be read as `"chime"`. A furin unit still holds `tubes` and `scale`, which windchime keeps for when the unit switches back to a tube chime.
 
-The collection SHALL carry a database-level schema validator, at strict level with the error action. It SHALL enforce these types, ranges, required fields and the absence of any other field. `instrument` and `patch` are allowed but not required, so documents stored before them stay valid. The database therefore SHALL refuse a non-conforming insert or update from any writer.
+The collection SHALL carry a database-level schema validator, at strict level with the error action. It SHALL enforce these types, ranges, required fields and the absence of any other field. `instrument`, `patch` and the document's `creatorHash` are allowed but not required, so documents stored before them stay valid. The database therefore SHALL refuse a non-conforming insert or update from any writer.
 
 #### Scenario: Database refuses an extra field
 - **WHEN** any client inserts a document into `chime_compositions` with a field not listed above, or with a unit missing `scale`
@@ -53,6 +53,14 @@ The collection SHALL carry a database-level schema validator, at strict level wi
 #### Scenario: Older documents stay valid
 - **WHEN** the validator with `patch` is applied to the collection
 - **THEN** every document stored before it still validates, and none of them gains a `patch` field
+
+#### Scenario: Database refuses a malformed creator hash
+- **WHEN** any client inserts a document whose `creatorHash` is not 64 lowercase hex characters
+- **THEN** MongoDB rejects the write
+
+#### Scenario: Owner-less documents stay valid
+- **WHEN** the validator with `creatorHash` is applied to the collection
+- **THEN** every document stored before it still validates, and none of them gains a `creatorHash`
 
 ### Requirement: Voice and scale catalog
 The API SHALL hold a catalog of windchime's scale names and voice ids, each voice with a display name. The catalog SHALL include windchime's built-in FURIN voice, `v6`, and its external-synth voices, whose ids are `x:` followed by the synth's id (the engine package name without `@dblodorn/` and `-engine`), starting with `x:casio-vz`, displayed as `CASIO VZ-10M`. The catalog SHALL only grow at the end, matching windchime's rule that scales and presets travel as indices, so every stored composition stays valid. A save SHALL be refused when a unit's `scale` is not in the catalog, or its `voice` is neither null nor in the catalog.
@@ -211,3 +219,32 @@ Saves SHALL be limited per end user. The end user is the IP its client forwards 
 #### Scenario: Visitors are limited separately
 - **WHEN** one end-user IP has exhausted its budget
 - **THEN** a save forwarded for another IP still succeeds
+
+### Requirement: Device key ownership
+A save MAY carry a `creatorKey`: the saving browser's device key, 43 base64url characters (32 random bytes), the same kind of key the synth libraries use. A malformed key SHALL fail the save with `BAD_USER_INPUT` and store nothing. When a save with a key creates a new composition, the document SHALL hold `creatorHash` = `sha256("chime-creator:" + creatorKey)`, and the API SHALL NOT store or log the key itself. A save that returns an existing composition (see "Duplicate saves") SHALL NOT add, change or remove its `creatorHash`, whichever key it carries. A save without a key SHALL store no `creatorHash`. `creatorHash` SHALL NOT be part of the fingerprint or the title, and SHALL NOT be exposed. Ownership grants nothing beyond being marked and listed: compositions still cannot be changed or deleted through the API.
+
+`ChimeComposition.yours(creatorKey)` SHALL be true only when that key created the composition, and false for any other key, a malformed key, or a composition without `creatorHash`. `dmbkSoundChimeCompositions(creatorKey)` SHALL narrow the public listing to visible compositions that key created, newest first; a malformed key there SHALL fail with `BAD_USER_INPUT`.
+
+#### Scenario: Save with a key
+- **WHEN** a client saves new units with key A
+- **THEN** the stored document holds `creatorHash` = `sha256("chime-creator:" + A)` and no field holds A itself
+
+#### Scenario: Duplicate keeps its owner
+- **WHEN** key A saves units, then key B saves the identical units
+- **THEN** key B gets A's composition with `created: false`, its `creatorHash` is still A's, `yours(creatorKey: B)` is false and `yours(creatorKey: A)` is true
+
+#### Scenario: Keyless save
+- **WHEN** a client saves new units without `creatorKey`
+- **THEN** the composition is stored without `creatorHash`, and `yours` is false for every key
+
+#### Scenario: Malformed key
+- **WHEN** a save passes `creatorKey: "abc"`
+- **THEN** it fails with `BAD_USER_INPUT` and nothing is stored
+
+#### Scenario: Listing one key's compositions
+- **WHEN** a client lists `dmbkSoundChimeCompositions(first: 20, creatorKey: A)`
+- **THEN** only visible compositions created with key A are returned, newest first
+
+#### Scenario: Fingerprints unchanged
+- **WHEN** the fingerprint of a composition saved with a key is computed
+- **THEN** it equals the fingerprint of the same units saved without one
